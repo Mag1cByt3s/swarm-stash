@@ -19,21 +19,24 @@
     <span class="logo-heart">♥</span>
     <span class="logo-text">SWARM<em>STASH</em></span>
   </a>
-  <nav id="guest-nav">
-    <button data-nav="home">Home</button>
-    <button data-nav="binder">Stash</button>
-  </nav>
-  <nav id="main-nav" class="hidden">
-    <button data-nav="binder">Binder</button>
-    <button data-nav="packs">Packs</button>
-    <button data-nav="swarm">Swarm</button>
-    <button data-nav="arena">Arena <span id="battle-badge" class="badge hidden"></span></button>
-    <button data-nav="market">Market</button>
-    <button data-nav="ranks">Ranks</button>
-    <button data-nav="trades">Trades <span id="trade-badge" class="badge hidden"></span></button>
-    <button data-nav="submit">Submit</button>
-    <button data-nav="modqueue" id="nav-mod" class="hidden">Queue <span id="mod-badge" class="badge hidden"></span></button>
-  </nav>
+  <button id="nav-toggle" aria-label="Toggle menu" aria-expanded="false">☰</button>
+  <div id="nav-panel">
+    <nav id="guest-nav">
+      <button data-nav="home">Home</button>
+      <button data-nav="binder">Stash</button>
+    </nav>
+    <nav id="main-nav" class="hidden">
+      <button data-nav="binder">Binder</button>
+      <button data-nav="packs">Packs</button>
+      <button data-nav="swarm">Swarm</button>
+      <button data-nav="arena">Arena <span id="battle-badge" class="badge hidden"></span></button>
+      <button data-nav="market">Market</button>
+      <button data-nav="ranks">Ranks</button>
+      <button data-nav="trades">Trades <span id="trade-badge" class="badge hidden"></span></button>
+      <button data-nav="submit">Submit</button>
+      <button data-nav="modqueue" id="nav-mod" class="hidden">Queue <span id="mod-badge" class="badge hidden"></span></button>
+    </nav>
+  </div>
   <div class="topbar-right">
     <button id="theme-toggle" title="Corrupt / purify the site">😈</button>
     <div id="wallet" class="hidden">

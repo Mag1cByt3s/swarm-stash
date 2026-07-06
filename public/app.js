@@ -196,10 +196,49 @@ document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-nav]');
   if (!t) return;
   e.preventDefault();
+  closeNavPanel();
   const target = t.dataset.nav;
   if (target === 'home') return nav('home'); // Home always goes home, logged in or not
   if (!state.me) return goToLogin(); // not logged in: send them to log in, not a no-op
   nav(target);
+});
+
+// ─── Responsive nav: collapse into a hamburger if the topbar can't fit it ───
+// Rather than guessing a fixed breakpoint (item count varies with auth state
+// and the admin-only Queue button), measure whether the topbar's content
+// actually overflows and toggle the collapsed layout based on that.
+function closeNavPanel() {
+  const panel = $('#nav-panel');
+  if (!panel.classList.contains('open')) return;
+  panel.classList.remove('open');
+  $('#nav-toggle').setAttribute('aria-expanded', 'false');
+  $('#nav-toggle').textContent = '☰';
+}
+function updateNavOverflow() {
+  const topbar = $('#topbar');
+  topbar.classList.remove('nav-collapsed');
+  closeNavPanel();
+  requestAnimationFrame(() => {
+    if (topbar.scrollWidth > topbar.clientWidth + 1) topbar.classList.add('nav-collapsed');
+  });
+}
+$('#nav-toggle').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const panel = $('#nav-panel');
+  const open = panel.classList.toggle('open');
+  $('#nav-toggle').setAttribute('aria-expanded', String(open));
+  $('#nav-toggle').textContent = open ? '✕' : '☰';
+});
+document.addEventListener('click', (e) => {
+  const panel = $('#nav-panel');
+  if (!panel.classList.contains('open')) return;
+  if (panel.contains(e.target) || $('#nav-toggle').contains(e.target)) return;
+  closeNavPanel();
+});
+let navResizeT;
+window.addEventListener('resize', () => {
+  clearTimeout(navResizeT);
+  navResizeT = setTimeout(updateNavOverflow, 120);
 });
 
 // ─── Auth / header ───────────────────────────────────────────────────────────
@@ -220,6 +259,7 @@ async function refreshMe() {
     $('#user-avatar').src = user.avatar;
     $('#daily-btn').classList.toggle('hidden', !user.dailyReady);
   }
+  updateNavOverflow(); // nav content just changed (guest vs full nav) — re-measure
   return authed;
 }
 
