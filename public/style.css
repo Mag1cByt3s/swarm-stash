@@ -526,6 +526,106 @@ a { color: var(--accent-2); }
   .trade-arrows { transform: rotate(90deg); }
 }
 
+/* ── showcase ── */
+.showcase-row {
+  display: flex; align-items: flex-start; gap: 16px;
+  background: var(--panel); border: 1px solid color-mix(in oklab, var(--cream) 30%, var(--line));
+  border-radius: var(--radius); padding: 14px 18px; margin-bottom: 20px;
+}
+.showcase-row .panel-title { padding-top: 8px; white-space: nowrap; }
+.showcase-cards { display: flex; gap: 12px; flex-wrap: wrap; }
+.showcase-cards .tcg-card { width: 108px; border-width: 2px; border-radius: 10px; }
+
+/* ── arena / battles ── */
+.battle-stage {
+  display: grid; grid-template-columns: 1fr 60px 1fr; gap: 14px; align-items: start;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 20px; margin-bottom: 16px;
+}
+.battle-mid {
+  align-self: center; text-align: center;
+  font-family: var(--font-display); font-size: 30px; color: var(--accent);
+  text-shadow: 0 0 18px var(--accent);
+}
+.battle-side { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.fighter { width: 170px; position: relative; }
+.bench { display: flex; gap: 10px; justify-content: center; }
+.bench .fighter { width: 92px; }
+.bench .fighter .fighter-stats { font-size: 9px; }
+.fighter.fainted { opacity: .35; filter: grayscale(1); }
+.fighter.swappable { cursor: pointer; }
+.fighter.swappable:hover { transform: translateY(-4px); }
+.fighter.swappable::after {
+  content: 'SWAP IN'; position: absolute; top: 40%; left: 50%; transform: translate(-50%,-50%);
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  background: rgba(0,0,0,.7); color: var(--accent-2); border: 1px solid var(--accent-2);
+  border-radius: 8px; padding: 3px 8px; opacity: 0; transition: opacity .15s; pointer-events: none;
+}
+.fighter.swappable:hover::after { opacity: 1; }
+.active-fighter { animation: rise .4s ease-out; }
+.hp-bar {
+  height: 10px; border-radius: 6px; margin-top: 8px;
+  background: rgba(0,0,0,.5); border: 1px solid var(--line); overflow: hidden;
+}
+.hp-fill { height: 100%; background: var(--c-uncommon); border-radius: 5px; transition: width .5s ease-out; }
+.hp-fill.hp-mid { background: var(--cream); }
+.hp-fill.hp-low { background: var(--accent-hot); }
+.fighter-stats {
+  margin-top: 5px; text-align: center;
+  font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim);
+}
+.battle-controls {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  justify-content: center; margin-bottom: 16px;
+}
+.battle-controls .hint { width: 100%; text-align: center; color: var(--ink-dim); }
+.battle-log {
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 18px; max-height: 220px; overflow-y: auto;
+  font-family: var(--font-mono); font-size: 12.5px; line-height: 1.9; color: var(--ink-dim);
+}
+.battle-log div:first-child { color: var(--ink); }
+.stat-line {
+  margin-top: 5px; text-align: center;
+  font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim);
+}
+.stat-line .special-name { color: var(--accent-2); cursor: help; }
+.zoom-stats { text-align: center; margin-top: 10px; }
+.zoom-stats .stat-line { font-size: 13px; }
+.battle-pick-grid { max-height: 52vh; }
+.pick-cell { display: flex; flex-direction: column; }
+#battle-wager-row {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 13px; color: var(--cream);
+}
+#battle-wager {
+  width: 90px; background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+  border-radius: 10px; padding: 9px 10px; font-family: var(--font-mono);
+}
+@media (max-width: 760px) {
+  .battle-stage { grid-template-columns: 1fr; }
+  .battle-mid { padding: 4px 0; }
+}
+
+/* ── market ── */
+.market-seller {
+  font-family: var(--font-mono); font-size: 10px; color: var(--ink-dim);
+  max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  align-self: center;
+}
+
+/* ── meme of the week ── */
+.vote-panel { margin-top: 24px; }
+.vote-winner {
+  background: color-mix(in oklab, var(--cream) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--cream) 40%, transparent);
+  border-radius: 12px; padding: 10px 14px; font-size: 14px;
+}
+.vote-count { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--cream); white-space: nowrap; }
+.vote-btn { flex-shrink: 0; }
+.vote-btn.active { color: var(--c-uncommon); border-color: var(--c-uncommon); }
+.meme-row.voted { border-color: var(--c-uncommon); }
+
 /* ── ranks: leaderboard + achievements ── */
 .ranks-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
 @media (max-width: 820px) { .ranks-layout { grid-template-columns: 1fr; } }

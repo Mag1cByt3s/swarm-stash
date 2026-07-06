@@ -7,7 +7,8 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const state = {
   me: null, config: null,
   cards: [], rarities: {}, series: {},
-  collection: [], trades: [], tradeUsers: {},
+  collection: [], showcase: [], trades: [], tradeUsers: {},
+  battles: [], battleUsers: {}, battle: null,
   view: 'home', member: null,
 };
 const cardById = () => Object.fromEntries(state.cards.map((c) => [c.id, c]));
@@ -118,10 +119,21 @@ function cardEl(card, { qty, onClick, foil } = {}) {
   return el;
 }
 
+// Combat stat readout for a card (foils fight ~10% harder)
+function statLine(card, foil) {
+  const c = card && card.combat;
+  if (!c) return '';
+  const v = (x) => Math.round(x * (foil ? 1.1 : 1));
+  return `<div class="stat-line">♥${v(c.maxHp)} ⚔${v(c.atk)} 🛡${v(c.def)} ⚡${v(c.spd)} · <span class="special-name" title="${esc(c.special.desc)}">${esc(c.special.name)}</span></div>`;
+}
+
 function zoomCard(card, foil) {
   const overlay = $('#zoom-overlay');
   overlay.classList.remove('closing');
-  $('#zoom-holder').replaceChildren(cardEl(card, { onClick: closeZoom, foil }));
+  const stats = document.createElement('div');
+  stats.className = 'zoom-stats';
+  stats.innerHTML = statLine(card, foil);
+  $('#zoom-holder').replaceChildren(cardEl(card, { onClick: closeZoom, foil }), stats);
   overlay.classList.remove('hidden');
 }
 
@@ -155,15 +167,18 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeZoom(
 // ─── Navigation ──────────────────────────────────────────────────────────────
 function nav(view) {
   state.view = view;
-  if (['binder', 'packs', 'swarm', 'ranks', 'trades', 'submit', 'modqueue'].includes(view)) history.replaceState(null, '', '#' + view);
+  if (view !== 'battle') clearInterval(battlePoll);
+  if (['binder', 'packs', 'swarm', 'arena', 'market', 'ranks', 'trades', 'submit', 'modqueue'].includes(view)) history.replaceState(null, '', '#' + view);
   $$('.view').forEach((v) => v.classList.add('hidden'));
   $(`#view-${view}`)?.classList.remove('hidden');
   $$('#main-nav button').forEach((b) => b.classList.toggle('active', b.dataset.nav === view));
   if (view === 'binder') renderBinder();
   if (view === 'swarm') renderSwarm();
+  if (view === 'arena') renderArena();
+  if (view === 'market') renderMarket();
   if (view === 'ranks') renderRanks();
   if (view === 'trades') renderTrades();
-  if (view === 'submit') renderMySubmissions();
+  if (view === 'submit') { renderMySubmissions(); renderVote(); }
   if (view === 'modqueue') renderQueue();
 }
 document.addEventListener('click', (e) => {
@@ -269,8 +284,16 @@ setTheme(localStorage.getItem('swarm-theme') || 'neuro');
 let binderFilter = 'all';
 
 async function loadCollection() {
-  const { cards } = await api('/api/collection');
+  const { cards, showcase } = await api('/api/collection');
   state.collection = cards;
+  state.showcase = showcase || [];
+}
+
+function renderShowcase(rowId, cardsId, instIds, collection) {
+  const byId = cardById();
+  const insts = instIds.map((id) => collection.find((c) => c.instanceId === id)).filter(Boolean);
+  $(`#${rowId}`).classList.toggle('hidden', insts.length === 0);
+  $(`#${cardsId}`).replaceChildren(...insts.map((inst) => cardEl(byId[inst.cardId], { foil: inst.foil })));
 }
 
 // Groups instances by card, foils separately from normal copies.
@@ -297,6 +320,7 @@ async function renderBinder() {
     <span class="stat-chip"><b>${ownedIds.size}</b>/<b>${state.cards.length}</b> unique</span>
     <span class="stat-chip"><b>${foilCount}</b> ✦ foil${foilCount === 1 ? '' : 's'}</span>
     <span class="stat-chip">set ${Math.round(ownedIds.size / state.cards.length * 100)}% complete</span>`;
+  renderShowcase('binder-showcase', 'binder-showcase-cards', state.showcase, state.collection);
 
   const filters = ['all', ...Object.keys(state.series), 'legendary'];
   $('#binder-filters').replaceChildren(...filters.map((f) => {
@@ -351,6 +375,40 @@ async function renderBinder() {
       } catch (err) { toast(err.message, true); }
     };
     actions.appendChild(sell);
+
+    const list = document.createElement('button');
+    list.textContent = 'sell 💰';
+    list.title = 'List one copy on the market';
+    list.onclick = async () => {
+      const input = prompt(`List "${card.name}"${foil ? ' (foil)' : ''} on the market for how many neurons?`, value * 2);
+      if (input === null) return;
+      const price = Math.floor(Number(input));
+      if (!price || price < 1) return toast('enter a valid price', true);
+      try {
+        await api('/api/market', { method: 'POST', body: { instanceId: insts[0].instanceId, price } });
+        toast(`💰 listed ${card.name} for ⚡${price}`);
+      } catch (err) { toast(err.message, true); }
+    };
+    actions.appendChild(list);
+
+    const pinned = insts.some((x) => state.showcase.includes(x.instanceId));
+    const pin = document.createElement('button');
+    pin.textContent = pinned ? 'unpin' : 'pin 📌';
+    pin.title = 'Pin to the showcase on your public binder (max 6)';
+    pin.onclick = async () => {
+      let next = state.showcase.filter((id) => !insts.some((x) => x.instanceId === id));
+      if (!pinned) {
+        if (state.showcase.length >= 6) return toast('showcase is full — unpin something first (6 max)', true);
+        next = [...state.showcase, insts[0].instanceId];
+      }
+      try {
+        const r = await api('/api/showcase', { method: 'POST', body: { instanceIds: next } });
+        state.showcase = r.showcase;
+        renderBinder();
+      } catch (err) { toast(err.message, true); }
+    };
+    actions.appendChild(pin);
+
     cell.appendChild(actions);
     grid.appendChild(cell);
   });
@@ -454,8 +512,9 @@ async function renderSwarm() {
 }
 
 async function openMember(userId) {
-  const { user, cards } = await api(`/api/collection?user=${encodeURIComponent(userId)}`);
+  const { user, cards, showcase } = await api(`/api/collection?user=${encodeURIComponent(userId)}`);
   state.member = { user, cards };
+  renderShowcase('member-showcase', 'member-showcase-cards', showcase || [], cards);
   $('#member-head').innerHTML = `
     <img src="${user.avatar}" alt="">
     <div><h2>${esc(user.name)}${user.bot ? ' <span class="bot-tag">SWARM BOT</span>' : ''}</h2>
@@ -600,6 +659,292 @@ async function actTrade(id, action) {
     handleUnlocks(r);
     renderTrades();
   } catch (err) { toast(err.message, true); renderTrades(); }
+}
+
+// ─── Arena: battles ──────────────────────────────────────────────────────────
+let battlePoll = null;
+const battlePick = new Set();
+let battleModalMode = null; // { type: 'challenge', toId, name } | { type: 'accept', battleId, name }
+
+async function loadBattles() {
+  const { battles, users } = await api('/api/battles');
+  state.battles = battles;
+  state.battleUsers = users;
+  const needsMe = battles.filter((b) =>
+    (b.status === 'pending' && b.toId === state.me.id) ||
+    (b.status === 'active' && b.state.turn === state.me.id)).length;
+  const badge = $('#battle-badge');
+  badge.textContent = needsMe;
+  badge.classList.toggle('hidden', needsMe === 0);
+}
+
+async function openBattleModal(mode) {
+  battleModalMode = mode;
+  battlePick.clear();
+  await loadCollection();
+  const byId = cardById();
+  $('#battle-modal-title').textContent = mode.type === 'challenge' ? `Challenge ${mode.name}` : `Battle vs ${mode.name} — pick your team`;
+  $('#battle-wager-row').classList.toggle('hidden', mode.type !== 'challenge');
+  $('#battle-wager').value = 0;
+  $('#bteam-count').textContent = '0/3';
+  $('#bteam-grid').replaceChildren(...state.collection.map((inst) => {
+    const card = byId[inst.cardId];
+    const cell = document.createElement('div');
+    cell.className = 'pick-cell';
+    const el = cardEl(card, { foil: inst.foil, onClick: () => {
+      if (battlePick.has(inst.instanceId)) battlePick.delete(inst.instanceId);
+      else if (battlePick.size < 3) battlePick.add(inst.instanceId);
+      else return toast('a team is exactly 3 cards', true);
+      el.classList.toggle('selected', battlePick.has(inst.instanceId));
+      $('#bteam-count').textContent = `${battlePick.size}/3`;
+    }});
+    cell.appendChild(el);
+    cell.insertAdjacentHTML('beforeend', statLine(card, inst.foil));
+    return cell;
+  }));
+  $('#battle-modal').classList.remove('hidden');
+}
+$('#battle-close').addEventListener('click', () => $('#battle-modal').classList.add('hidden'));
+
+$('#battle-send').addEventListener('click', async () => {
+  if (battlePick.size !== 3) return toast('pick exactly 3 cards', true);
+  try {
+    const r = battleModalMode.type === 'challenge'
+      ? await api('/api/battles', { method: 'POST', body: { toId: battleModalMode.toId, team: [...battlePick], wager: Number($('#battle-wager').value) || 0 } })
+      : await api(`/api/battles/${battleModalMode.battleId}/accept`, { method: 'POST', body: { team: [...battlePick] } });
+    $('#battle-modal').classList.add('hidden');
+    handleUnlocks(r);
+    if (r.battle.status === 'declined') { toast('😤 challenge declined', true); nav('arena'); }
+    else if (r.battle.status === 'pending') { toast('⚔️ challenge sent!'); nav('arena'); }
+    else openBattle(r.battle.id);
+  } catch (err) { toast(err.message, true); }
+});
+
+async function renderArena() {
+  await loadBattles();
+  const list = $('#battle-list');
+  list.replaceChildren(...state.battles.map((b) => {
+    const incoming = b.toId === state.me.id;
+    const other = state.battleUsers[incoming ? b.fromId : b.toId] || { name: '???', avatar: '' };
+    const chip = b.status === 'done' ? (b.winnerId === state.me.id ? 'accepted' : 'declined')
+      : b.status === 'active' ? 'pending' : b.status;
+    const label = b.status === 'done' ? (b.winnerId === state.me.id ? 'won 🏆' : 'lost 💀')
+      : b.status === 'active' ? (b.state.turn === state.me.id ? 'your turn!' : 'their turn') : b.status;
+    const row = document.createElement('div');
+    row.className = 'trade-row';
+    row.innerHTML = `
+      <div class="trade-row-head">
+        <img src="${other.avatar}" alt="">
+        <span class="t-who">${incoming ? `${esc(other.name)} → you` : `you → ${esc(other.name)}`}${other.bot ? ' <span class="bot-tag">SWARM BOT</span>' : ''}</span>
+        ${b.wager ? `<span class="t-when">wager ⚡${b.wager}</span>` : ''}
+        <span class="t-when">${new Date(b.createdAt).toLocaleString()}</span>
+        <span class="status-chip status-${chip}">${label}</span>
+      </div>
+      <div class="trade-actions"></div>`;
+    const actions = $('.trade-actions', row);
+    if (b.status === 'pending' && incoming) {
+      actions.append(
+        tradeBtn('Accept ⚔️', 'btn-primary accept', () => openBattleModal({ type: 'accept', battleId: b.id, name: other.name })),
+        tradeBtn('Decline', 'btn-ghost', () => actBattle(b.id, 'decline')),
+      );
+    } else if (b.status === 'pending') {
+      actions.append(tradeBtn('Cancel challenge', 'btn-ghost', () => actBattle(b.id, 'cancel')));
+    } else if (b.status === 'active') {
+      actions.append(tradeBtn(b.state.turn === state.me.id ? 'Fight! ⚔️' : 'Spectate 👀', 'btn-primary', () => openBattle(b.id)));
+    } else if (b.status === 'done') {
+      actions.append(tradeBtn('View log', 'btn-ghost', () => openBattle(b.id)));
+    }
+    return row;
+  }));
+  $('#battles-empty').classList.toggle('hidden', state.battles.length > 0);
+}
+
+async function actBattle(id, action) {
+  try {
+    await api(`/api/battles/${id}/${action}`, { method: 'POST' });
+    toast(action === 'decline' ? 'challenge declined' : 'challenge cancelled');
+    renderArena();
+  } catch (err) { toast(err.message, true); renderArena(); }
+}
+
+async function openBattle(id) {
+  clearInterval(battlePoll);
+  try {
+    const { battle, users } = await api(`/api/battles/${id}`);
+    state.battle = { data: battle, users };
+    nav('battle');
+    renderBattleScreen();
+    if (battle.status === 'active') battlePoll = setInterval(refreshBattle, 2500);
+  } catch (err) { toast(err.message, true); }
+}
+
+async function refreshBattle() {
+  if (state.view !== 'battle' || !state.battle) return clearInterval(battlePoll);
+  try {
+    const { battle, users } = await api(`/api/battles/${state.battle.data.id}`);
+    const changed = battle.status !== state.battle.data.status
+      || JSON.stringify(battle.state) !== JSON.stringify(state.battle.data.state);
+    state.battle = { data: battle, users };
+    if (changed) renderBattleScreen();
+    if (battle.status !== 'active') clearInterval(battlePoll);
+  } catch { /* transient network hiccup — next poll retries */ }
+}
+
+function fighterEl(f, { active, onClick } = {}) {
+  const byId = cardById();
+  const wrap = document.createElement('div');
+  wrap.className = 'fighter' + (active ? ' active-fighter' : '') + (f.hp <= 0 ? ' fainted' : '');
+  const card = byId[f.cardId];
+  wrap.appendChild(cardEl(card, { foil: f.foil, onClick: onClick || (() => zoomCard(card, f.foil)) }));
+  const pct = Math.round(f.hp / f.maxHp * 100);
+  wrap.insertAdjacentHTML('beforeend', `
+    <div class="hp-bar"><div class="hp-fill ${pct < 25 ? 'hp-low' : pct < 55 ? 'hp-mid' : ''}" style="width:${pct}%"></div></div>
+    <div class="fighter-stats">♥${f.hp}/${f.maxHp} · ⚔${f.atk} 🛡${f.def} ⚡${f.spd}</div>`);
+  return wrap;
+}
+
+function renderBattleScreen() {
+  const { data: b, users } = state.battle;
+  const oppId = b.fromId === state.me.id ? b.toId : b.fromId;
+  const opp = users[oppId] || { name: '???', avatar: '' };
+  const myTurn = b.status === 'active' && b.state.turn === state.me.id;
+  $('#battle-head').innerHTML = `
+    <img src="${opp.avatar}" alt="">
+    <div><h2>vs ${esc(opp.name)}${b.wager ? ` · pot ⚡${b.wager * 2}` : ''}</h2>
+    <div class="u-stats">${
+      b.status === 'active' ? (myTurn ? '🔥 your turn!' : `waiting for ${esc(opp.name)}…`)
+      : b.status === 'done' ? (b.winnerId === state.me.id ? 'VICTORY 🏆' : 'defeat 💀')
+      : b.status}</div></div>`;
+
+  const renderSide = (sel, uid, mine) => {
+    const el = $(sel);
+    el.replaceChildren();
+    const team = b.state.teams[uid];
+    if (!team) { el.innerHTML = '<p class="empty-note">team hidden until the challenge is accepted</p>'; return; }
+    const act = b.state.active[uid];
+    el.appendChild(fighterEl(team[act], { active: true }));
+    const bench = document.createElement('div');
+    bench.className = 'bench';
+    team.forEach((f, i) => {
+      if (i === act) return;
+      const canSwap = mine && myTurn && f.hp > 0;
+      const fe = fighterEl(f, canSwap ? { onClick: () => battleMove({ type: 'swap', index: i }) } : {});
+      if (canSwap) fe.classList.add('swappable');
+      bench.appendChild(fe);
+    });
+    el.appendChild(bench);
+  };
+  renderSide('#foe-side', oppId, false);
+  renderSide('#my-side', state.me.id, true);
+
+  const controls = $('#battle-controls');
+  controls.replaceChildren();
+  if (b.status === 'active') {
+    const meF = b.state.teams[state.me.id][b.state.active[state.me.id]];
+    const atk = tradeBtn(`${meF.basicName} ⚔`, 'btn-primary', () => battleMove({ type: 'attack', move: 0 }));
+    const spc = tradeBtn(`${meF.special.name} ✨`, 'btn-primary', () => battleMove({ type: 'attack', move: 1 }));
+    spc.title = meF.special.desc;
+    atk.disabled = spc.disabled = !myTurn;
+    controls.append(atk, spc, tradeBtn('forfeit 🏳️', 'btn-ghost', () => {
+      if (confirm('Forfeit this battle? The pot goes to your opponent.')) battleMove({ type: 'forfeit' });
+    }));
+    if (myTurn) controls.insertAdjacentHTML('beforeend', '<span class="hint">…or click a benched card to swap it in (uses your turn)</span>');
+  }
+  $('#battle-log').replaceChildren(...b.state.log.slice().reverse().map((l) => {
+    const d = document.createElement('div');
+    d.textContent = l;
+    return d;
+  }));
+}
+
+async function battleMove(body) {
+  try {
+    const r = await api(`/api/battles/${state.battle.data.id}/move`, { method: 'POST', body });
+    state.battle.data = r.battle;
+    handleUnlocks(r);
+    renderBattleScreen();
+    if (r.battle.status !== 'active') clearInterval(battlePoll);
+  } catch (err) { toast(err.message, true); refreshBattle(); }
+}
+
+$('#challenge-btn').addEventListener('click', () =>
+  openBattleModal({ type: 'challenge', toId: state.member.user.id, name: state.member.user.name }));
+
+// ─── Market ──────────────────────────────────────────────────────────────────
+async function renderMarket() {
+  const { listings } = await api('/api/market');
+  const byId = cardById();
+  const grid = $('#market-grid');
+  grid.replaceChildren(...listings.map((l, i) => {
+    const card = byId[l.card.cardId];
+    const cell = document.createElement('div');
+    cell.className = 'card-cell';
+    cell.style.setProperty('--i', i);
+    cell.appendChild(cardEl(card, { foil: l.card.foil }));
+    const mine = l.sellerId === state.me.id;
+    const actions = document.createElement('div');
+    actions.className = 'card-actions';
+    actions.innerHTML = `<span class="market-seller" title="seller">${esc(l.sellerName)}</span>`;
+    const btn = document.createElement('button');
+    btn.textContent = mine ? 'delist ✕' : `buy · ⚡${l.price}`;
+    btn.onclick = async () => {
+      try {
+        if (mine) {
+          await api(`/api/market/${l.id}/cancel`, { method: 'POST' });
+          toast('listing cancelled');
+        } else {
+          if (!confirm(`Buy ${card.name}${l.card.foil ? ' (foil)' : ''} from ${l.sellerName} for ⚡${l.price}?`)) return;
+          const r = await api(`/api/market/${l.id}/buy`, { method: 'POST' });
+          toast(`💰 bought ${card.name}!`);
+          handleUnlocks(r);
+        }
+        renderMarket();
+      } catch (err) { toast(err.message, true); renderMarket(); }
+    };
+    actions.appendChild(btn);
+    cell.appendChild(actions);
+    return cell;
+  }));
+  $('#market-empty').classList.toggle('hidden', listings.length > 0);
+}
+
+// ─── Meme of the week vote ───────────────────────────────────────────────────
+async function renderVote() {
+  const { week, candidates, myVote, lastWinner } = await api('/api/vote');
+  $('#vote-week').textContent = week;
+  $('#vote-winner').innerHTML = lastWinner
+    ? `<div class="vote-winner">👑 <b>${esc(lastWinner.name)}</b> by ${esc(lastWinner.submitterName)} won ${lastWinner.week} — the card is now <span class="r-${lastWinner.rarity}">${lastWinner.rarity}</span>!</div>`
+    : '';
+  const list = $('#vote-list');
+  list.replaceChildren(...candidates.map((m) => {
+    const row = document.createElement('div');
+    row.className = 'meme-row' + (myVote === m.id ? ' voted' : '');
+    row.innerHTML = `
+      <img src="/memes/${m.file}" alt="">
+      <div class="meme-row-info"><b>${esc(m.name)}</b><span>by ${esc(m.submitterName)} · <span class="r-${m.rarity}">${m.rarity}</span></span></div>
+      <span class="vote-count">${m.votes} 🗳️</span>`;
+    const btn = document.createElement('button');
+    btn.className = 'btn-ghost vote-btn';
+    if (m.submitterId === state.me.id) {
+      btn.textContent = 'yours';
+      btn.disabled = true;
+    } else if (myVote === m.id) {
+      btn.textContent = 'voted ✓';
+      btn.classList.add('active');
+    } else {
+      btn.textContent = 'vote';
+      btn.onclick = async () => {
+        try {
+          await api('/api/vote', { method: 'POST', body: { memeId: m.id } });
+          toast(`🗳️ voted for "${m.name}"`);
+          renderVote();
+        } catch (err) { toast(err.message, true); }
+      };
+    }
+    row.appendChild(btn);
+    return row;
+  }));
+  $('#vote-empty').classList.toggle('hidden', candidates.length > 0);
 }
 
 // ─── Ranks: leaderboard + achievements ──────────────────────────────────────
@@ -768,9 +1113,10 @@ function renderHeroCards() {
   const authed = await refreshMe();
   if (authed) {
     loadTrades();
-    setInterval(loadTrades, 30000); // keep the trade badge fresh
+    loadBattles();
+    setInterval(() => { loadTrades(); loadBattles(); }, 30000); // keep the badges fresh
     const deep = location.hash.slice(1);
-    nav(['binder', 'packs', 'swarm', 'ranks', 'trades', 'submit', 'modqueue'].includes(deep) ? deep : 'binder');
+    nav(['binder', 'packs', 'swarm', 'arena', 'market', 'ranks', 'trades', 'submit', 'modqueue'].includes(deep) ? deep : 'binder');
   } else {
     nav('home');
   }

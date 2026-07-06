@@ -72,10 +72,52 @@ db.exec(`
     value  INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (userId, key)
   );
+
+  CREATE TABLE IF NOT EXISTS battles (
+    id        TEXT PRIMARY KEY,
+    fromId    TEXT NOT NULL REFERENCES users(id),
+    toId      TEXT NOT NULL REFERENCES users(id),
+    wager     INTEGER NOT NULL DEFAULT 0,
+    status    TEXT NOT NULL DEFAULT 'pending',  -- pending | active | done | declined | cancelled
+    state     TEXT NOT NULL,                    -- JSON: teams, active, turn, log
+    winnerId  TEXT,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_battles_users ON battles(fromId, toId);
+
+  CREATE TABLE IF NOT EXISTS listings (
+    id         TEXT PRIMARY KEY,
+    instanceId TEXT NOT NULL,
+    sellerId   TEXT NOT NULL REFERENCES users(id),
+    price      INTEGER NOT NULL,
+    status     TEXT NOT NULL DEFAULT 'active',  -- active | sold | cancelled
+    buyerId    TEXT,
+    createdAt  INTEGER NOT NULL,
+    resolvedAt INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_listings_status ON listings(status);
+
+  CREATE TABLE IF NOT EXISTS votes (
+    week    TEXT NOT NULL,
+    voterId TEXT NOT NULL REFERENCES users(id),
+    memeId  TEXT NOT NULL REFERENCES memes(id),
+    votedAt INTEGER NOT NULL,
+    PRIMARY KEY (week, voterId)
+  );
+
+  CREATE TABLE IF NOT EXISTS weekly_winners (
+    week        TEXT PRIMARY KEY,
+    memeId      TEXT NOT NULL,
+    submitterId TEXT NOT NULL,
+    decidedAt   INTEGER NOT NULL
+  );
 `);
 
 // foil variants were added after launch — patch older databases in place
 try { db.exec(`ALTER TABLE inventory ADD COLUMN foil INTEGER NOT NULL DEFAULT 0`); } catch { /* column exists */ }
+// showcase (pinned cards) came even later
+try { db.exec(`ALTER TABLE users ADD COLUMN showcase TEXT NOT NULL DEFAULT '[]'`); } catch { /* column exists */ }
 
 const newId = (prefix) => `${prefix}_${crypto.randomBytes(6).toString('hex')}`;
 
@@ -118,6 +160,33 @@ const q = {
   countPending: db.prepare(`SELECT COUNT(*) AS n FROM memes WHERE status = 'pending'`),
   countApprovedBy: db.prepare(`SELECT COUNT(*) AS n FROM memes WHERE submitterId = ? AND status = 'approved'`),
 
+  insertBattle: db.prepare(`INSERT INTO battles (id, fromId, toId, wager, status, state, createdAt, updatedAt)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
+  getBattle: db.prepare(`SELECT * FROM battles WHERE id = ?`),
+  listBattlesFor: db.prepare(`SELECT * FROM battles WHERE fromId = ? OR toId = ? ORDER BY createdAt DESC LIMIT 50`),
+  updateBattle: db.prepare(`UPDATE battles SET status = ?, state = ?, winnerId = ?, updatedAt = ? WHERE id = ?`),
+
+  insertListing: db.prepare(`INSERT INTO listings (id, instanceId, sellerId, price, status, createdAt)
+                             VALUES (?, ?, ?, ?, 'active', ?)`),
+  getListing: db.prepare(`SELECT * FROM listings WHERE id = ?`),
+  activeListings: db.prepare(`SELECT l.*, u.name AS sellerName, u.avatar AS sellerAvatar
+                              FROM listings l JOIN users u ON u.id = l.sellerId
+                              WHERE l.status = 'active' ORDER BY l.createdAt DESC`),
+  activeListingIds: db.prepare(`SELECT instanceId FROM listings WHERE status = 'active'`),
+  resolveListing: db.prepare(`UPDATE listings SET status = ?, buyerId = ?, resolvedAt = ? WHERE id = ?`),
+
+  setShowcase: db.prepare(`UPDATE users SET showcase = ? WHERE id = ?`),
+
+  upsertVote: db.prepare(`INSERT INTO votes (week, voterId, memeId, votedAt) VALUES (?, ?, ?, ?)
+                          ON CONFLICT(week, voterId) DO UPDATE SET memeId = excluded.memeId, votedAt = excluded.votedAt`),
+  votesForWeek: db.prepare(`SELECT memeId, COUNT(*) AS n FROM votes WHERE week = ? GROUP BY memeId ORDER BY n DESC`),
+  myVote: db.prepare(`SELECT memeId FROM votes WHERE week = ? AND voterId = ?`),
+  getWinner: db.prepare(`SELECT * FROM weekly_winners WHERE week = ?`),
+  latestWinner: db.prepare(`SELECT * FROM weekly_winners ORDER BY decidedAt DESC LIMIT 1`),
+  insertWinner: db.prepare(`INSERT OR IGNORE INTO weekly_winners (week, memeId, submitterId, decidedAt) VALUES (?, ?, ?, ?)`),
+  wotwWinsBy: db.prepare(`SELECT COUNT(*) AS n FROM weekly_winners WHERE submitterId = ?`),
+  setMemeRarity: db.prepare(`UPDATE memes SET rarity = ? WHERE id = ?`),
+
   unlockAch: db.prepare(`INSERT OR IGNORE INTO achievements (userId, achId, unlockedAt) VALUES (?, ?, ?)`),
   listAch: db.prepare(`SELECT achId, unlockedAt FROM achievements WHERE userId = ?`),
   bumpStat: db.prepare(`INSERT INTO stats (userId, key, value) VALUES (?, ?, ?)
@@ -126,6 +195,7 @@ const q = {
 };
 
 const rowToTrade = (r) => r && { ...r, offer: JSON.parse(r.offer), request: JSON.parse(r.request) };
+const rowToBattle = (r) => r && { ...r, state: JSON.parse(r.state) };
 
 // ─── public API ──────────────────────────────────────────────────────────────
 const store = {
@@ -154,6 +224,7 @@ const store = {
   getInstance: (id) => q.getInstance.get(id),
   listByOwner: (ownerId) => q.listByOwner.all(ownerId),
   deleteInstance: (id) => q.deleteInstance.run(id),
+  transferInstance: (id, ownerId) => q.setOwner.run(ownerId, id),
 
   createTrade({ fromId, toId, offer, request, message }) {
     const trade = { id: newId('t'), fromId, toId, offer, request, message, status: 'pending', createdAt: Date.now(), resolvedAt: null };
@@ -164,11 +235,13 @@ const store = {
   listTradesFor: (userId) => q.listTradesFor.all(userId, userId).map(rowToTrade),
   resolveTrade: (id, status) => q.resolveTrade.run(status, Date.now(), id),
 
+  // instances that must not change hands: sides of pending trades + active market listings
   lockedInstanceIds() {
     const locked = new Set();
     for (const r of q.pendingTrades.all()) {
       for (const id of [...JSON.parse(r.offer), ...JSON.parse(r.request)]) locked.add(id);
     }
+    for (const r of q.activeListingIds.all()) locked.add(r.instanceId);
     return locked;
   },
 
@@ -187,6 +260,35 @@ const store = {
   listAchievements: (userId) => q.listAch.all(userId),
   bumpStat: (userId, key, by = 1) => q.bumpStat.run(userId, key, by),
   getStat: (userId, key) => (q.getStat.get(userId, key) || { value: 0 }).value,
+
+  createBattle({ fromId, toId, wager, status, state }) {
+    const battle = { id: newId('b'), fromId, toId, wager, status, state, winnerId: null, createdAt: Date.now(), updatedAt: Date.now() };
+    q.insertBattle.run(battle.id, fromId, toId, wager, status, JSON.stringify(state), battle.createdAt, battle.updatedAt);
+    return this.getBattle(battle.id);
+  },
+  getBattle: (id) => rowToBattle(q.getBattle.get(id)),
+  listBattlesFor: (userId) => q.listBattlesFor.all(userId, userId).map(rowToBattle),
+  saveBattle: (b) => q.updateBattle.run(b.status, JSON.stringify(b.state), b.winnerId, Date.now(), b.id),
+
+  createListing({ instanceId, sellerId, price }) {
+    const id = newId('l');
+    q.insertListing.run(id, instanceId, sellerId, price, Date.now());
+    return q.getListing.get(id);
+  },
+  getListing: (id) => q.getListing.get(id),
+  activeListings: () => q.activeListings.all(),
+  resolveListing: (id, status, buyerId = null) => q.resolveListing.run(status, buyerId, Date.now(), id),
+
+  setShowcase: (userId, instanceIds) => q.setShowcase.run(JSON.stringify(instanceIds), userId),
+
+  castVote: (week, voterId, memeId) => q.upsertVote.run(week, voterId, memeId, Date.now()),
+  votesForWeek: (week) => q.votesForWeek.all(week),
+  myVote: (week, voterId) => (q.myVote.get(week, voterId) || {}).memeId || null,
+  getWinner: (week) => q.getWinner.get(week),
+  latestWinner: () => q.latestWinner.get(),
+  recordWinner: (week, memeId, submitterId) => q.insertWinner.run(week, memeId, submitterId, Date.now()),
+  wotwWinsBy: (userId) => q.wotwWinsBy.get(userId).n,
+  setMemeRarity: (id, rarity) => q.setMemeRarity.run(rarity, id),
 
   // Swap card ownership atomically, then mark the trade resolved.
   executeTrade(trade) {

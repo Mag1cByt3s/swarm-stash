@@ -23,6 +23,8 @@
     <button data-nav="binder">Binder</button>
     <button data-nav="packs">Packs</button>
     <button data-nav="swarm">Swarm</button>
+    <button data-nav="arena">Arena <span id="battle-badge" class="badge hidden"></span></button>
+    <button data-nav="market">Market</button>
     <button data-nav="ranks">Ranks</button>
     <button data-nav="trades">Trades <span id="trade-badge" class="badge hidden"></span></button>
     <button data-nav="submit">Submit</button>
@@ -74,6 +76,10 @@
       <h2>My Binder</h2>
       <div class="binder-stats" id="binder-stats"></div>
     </div>
+    <div class="showcase-row hidden" id="binder-showcase">
+      <span class="panel-title">📌 showcase</span>
+      <div class="showcase-cards" id="binder-showcase-cards"></div>
+    </div>
     <div class="filter-row" id="binder-filters"></div>
     <div class="card-grid" id="binder-grid"></div>
     <p class="empty-note hidden" id="binder-empty">Your binder is empty… go rip some packs! 📦</p>
@@ -114,9 +120,49 @@
     <div class="view-head">
       <button class="btn-ghost" data-nav="swarm">← back to swarm</button>
       <div class="member-head" id="member-head"></div>
+      <button id="challenge-btn" class="btn-ghost">⚔️ Challenge</button>
       <button id="propose-btn" class="btn-primary">Propose Trade</button>
     </div>
+    <div class="showcase-row hidden" id="member-showcase">
+      <span class="panel-title">📌 showcase</span>
+      <div class="showcase-cards" id="member-showcase-cards"></div>
+    </div>
     <div class="card-grid" id="member-grid"></div>
+  </section>
+
+  <!-- ═══ arena: battle list ═══ -->
+  <section id="view-arena" class="view hidden">
+    <div class="view-head">
+      <h2>The Arena</h2>
+      <p class="view-sub">Pokémon-style meme combat. Pick 3 cards — stats come from the card itself (foils fight 10% harder), every series beats another, and the loser watches their wager fly away. Challenge someone from their binder page.</p>
+    </div>
+    <div id="battle-list"></div>
+    <p class="empty-note hidden" id="battles-empty">No battles yet. Visit <a href="#" data-nav="swarm">the swarm</a> and slap someone with a gymbag.</p>
+  </section>
+
+  <!-- ═══ live battle ═══ -->
+  <section id="view-battle" class="view hidden">
+    <div class="view-head">
+      <button class="btn-ghost" data-nav="arena">← arena</button>
+      <div class="member-head" id="battle-head"></div>
+    </div>
+    <div class="battle-stage">
+      <div class="battle-side" id="foe-side"></div>
+      <div class="battle-mid">VS</div>
+      <div class="battle-side" id="my-side"></div>
+    </div>
+    <div class="battle-controls" id="battle-controls"></div>
+    <div class="battle-log" id="battle-log"></div>
+  </section>
+
+  <!-- ═══ marketplace ═══ -->
+  <section id="view-market" class="view hidden">
+    <div class="view-head">
+      <h2>Market</h2>
+      <p class="view-sub">Cards listed by swarm members for cold hard neurons. List your own from the binder.</p>
+    </div>
+    <div class="card-grid" id="market-grid"></div>
+    <p class="empty-note hidden" id="market-empty">Nothing for sale. Capitalism sleeps.</p>
   </section>
 
   <!-- ═══ ranks: leaderboard + achievements ═══ -->
@@ -163,6 +209,13 @@
         <div id="my-memes"></div>
       </div>
     </div>
+    <div class="submit-panel vote-panel">
+      <h4 class="panel-title">🗳️ Meme of the Week <span id="vote-week" class="pick-count"></span></h4>
+      <p class="hint">One vote per member per week (not for your own meme). The winner's card gets a permanent rarity upgrade and its creator pockets ⚡250.</p>
+      <div id="vote-winner"></div>
+      <div id="vote-list"></div>
+      <p class="empty-note hidden" id="vote-empty">No approved community memes yet — submit one!</p>
+    </div>
   </section>
 
   <!-- ═══ mod queue ═══ -->
@@ -207,6 +260,24 @@
     <div class="trade-send-row">
       <input id="trade-message" maxlength="200" placeholder="message (optional) — e.g. 'need that gymbag, please'">
       <button id="trade-send" class="btn-primary">Send offer</button>
+    </div>
+  </div>
+</div>
+
+<!-- battle team picker modal -->
+<div id="battle-modal" class="overlay hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="battle-modal-title">Pick your team</h3>
+      <button class="btn-ghost" id="battle-close">✕</button>
+    </div>
+    <div class="trade-col">
+      <h4>Your team <span id="bteam-count" class="pick-count">0/3</span> — tap cards to select</h4>
+      <div class="mini-grid battle-pick-grid" id="bteam-grid"></div>
+    </div>
+    <div class="trade-send-row">
+      <label id="battle-wager-row">wager ⚡ <input id="battle-wager" type="number" min="0" max="1000" value="0"></label>
+      <button id="battle-send" class="btn-primary">Fight! ⚔️</button>
     </div>
   </div>
 </div>

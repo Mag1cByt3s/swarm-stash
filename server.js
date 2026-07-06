@@ -7,6 +7,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { CARDS, RARITIES, SERIES, PACK_COST, PACK_SIZE, DAILY_NEURONS, STARTING_NEURONS, STARTER_CARDS, FOIL_CHANCE, FOIL_MULT } = require('./catalog');
 const { ACHIEVEMENTS } = require('./achievements');
+const battle = require('./battle');
 
 // ─── Config (.env) ───────────────────────────────────────────────────────────
 // Checked next to server.js and in the working directory — the latter matters
@@ -143,6 +144,7 @@ function checkAchievements(user) {
     hasFoilLegendary: insts.some((i) => i.foil && isLegendary(i)),
     neurons: fresh.neurons,
     approvedMemes: store.approvedCountBy(user.id),
+    wotwWins: store.wotwWinsBy(user.id),
   };
   const unlocked = [];
   let neurons = fresh.neurons;
@@ -165,6 +167,116 @@ function tradeExecuted(trade) {
     unlocked[id] = checkAchievements(store.getUser(id));
   }
   return unlocked;
+}
+
+// ─── Battles ─────────────────────────────────────────────────────────────────
+const MAX_WAGER = 1000;
+
+// 3 distinct owned instances → fighter snapshots (stats frozen at this moment)
+function buildTeam(user, ids) {
+  if (!Array.isArray(ids) || ids.length !== 3 || new Set(ids).size !== 3) return null;
+  const team = [];
+  for (const id of ids) {
+    const inst = store.getInstance(id);
+    if (!inst || inst.ownerId !== user.id) return null;
+    team.push(battle.fighter(getCard(inst.cardId), inst.foil));
+  }
+  return team;
+}
+
+// Bots field their 3 most valuable cards (distinct cards where possible)
+function botTeamIds(bot) {
+  const insts = store.listByOwner(bot.id).sort((a, b) => instValue(b) - instValue(a));
+  const picked = [];
+  const seen = new Set();
+  for (const i of insts) {
+    if (seen.has(i.cardId)) continue;
+    seen.add(i.cardId);
+    picked.push(i.id);
+    if (picked.length === 3) return picked;
+  }
+  for (const i of insts) { // not enough distinct cards — allow duplicates
+    if (!picked.includes(i.id)) picked.push(i.id);
+    if (picked.length === 3) return picked;
+  }
+  return null;
+}
+
+function activateBattle(b, opponentTeam) {
+  b.state.teams[b.toId] = opponentTeam;
+  b.status = 'active';
+  // faster opening fighter moves first; challenger wins speed ties
+  const from = b.state.teams[b.fromId][0], to = b.state.teams[b.toId][0];
+  b.state.turn = to.spd > from.spd ? b.toId : b.fromId;
+  battle.log(b.state, `⚔️ Battle start! ${battle.activeF(b.state, b.state.turn).name} is faster and moves first.`);
+}
+
+function finishBattle(b, winnerId) {
+  b.status = 'done';
+  b.winnerId = winnerId;
+  b.state.turn = null;
+  battle.log(b.state, `🏆 ${store.getUser(winnerId).name} wins the battle!`);
+  if (b.wager > 0) {
+    const w = store.getUser(winnerId);
+    store.setNeurons(winnerId, w.neurons + b.wager * 2);
+    battle.log(b.state, `⚡${b.wager * 2} pot goes to the winner.`);
+  }
+  store.bumpStat(winnerId, 'battleWins');
+  const unlocked = {};
+  for (const id of [b.fromId, b.toId]) unlocked[id] = checkAchievements(store.getUser(id));
+  return unlocked;
+}
+
+// Bots take their turns immediately; returns finish unlocks if the bot won.
+function runBotTurns(b) {
+  let guard = 0;
+  while (b.status === 'active' && guard++ < 50) {
+    const turnUser = store.getUser(b.state.turn);
+    if (!turnUser || !turnUser.bot) break;
+    const oppId = b.state.turn === b.fromId ? b.toId : b.fromId;
+    const wiped = battle.attack(b.state, turnUser.id, oppId, battle.botPickMove(b.state, turnUser.id));
+    if (wiped) return finishBattle(b, turnUser.id);
+    b.state.turn = oppId;
+  }
+  return null;
+}
+
+const battleOut = (b) => ({
+  id: b.id, fromId: b.fromId, toId: b.toId, wager: b.wager,
+  status: b.status, winnerId: b.winnerId, state: b.state,
+  createdAt: b.createdAt, updatedAt: b.updatedAt,
+});
+
+// ─── Meme of the week ────────────────────────────────────────────────────────
+const WOTW_REWARD = 250;
+const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+
+function weekKey(d = new Date()) { // ISO week, e.g. 2026-W28
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return `${date.getUTCFullYear()}-W${String(Math.ceil(((date - yearStart) / 864e5 + 1) / 7)).padStart(2, '0')}`;
+}
+
+// Lazily crown last week's winner: +neurons for the submitter and the meme
+// card gets a permanent one-tier rarity upgrade.
+function resolveWeeklyVote() {
+  const prev = weekKey(new Date(Date.now() - 7 * 864e5));
+  if (store.getWinner(prev)) return;
+  for (const t of store.votesForWeek(prev)) { // sorted by votes desc
+    const meme = store.getMeme(t.memeId);
+    if (!meme || meme.status !== 'approved') continue;
+    store.recordWinner(prev, meme.id, meme.submitterId);
+    const up = RARITY_ORDER[Math.min(RARITY_ORDER.indexOf(meme.rarity) + 1, RARITY_ORDER.length - 1)];
+    if (up !== meme.rarity) store.setMemeRarity(meme.id, up);
+    const sub = store.getUser(meme.submitterId);
+    if (sub) {
+      store.setNeurons(sub.id, sub.neurons + WOTW_REWARD);
+      checkAchievements(store.getUser(sub.id));
+    }
+    return;
+  }
 }
 
 function publicUser(u) {
@@ -339,7 +451,10 @@ async function handle(req, res) {
 
   // ── public API ──
   if (p === '/api/config') return sendJSON(res, 200, { discord: DISCORD_ENABLED, devLogin: DEV_LOGIN, packCost: PACK_COST, packSize: PACK_SIZE, daily: DAILY_NEURONS, moderation: MODERATION, foilChance: FOIL_CHANCE, foilMult: FOIL_MULT });
-  if (p === '/api/catalog') return sendJSON(res, 200, { cards: allCards(), rarities: RARITIES, series: SERIES });
+  if (p === '/api/catalog') {
+    const cards = allCards().map((c) => ({ ...c, combat: battle.statsFor(c) }));
+    return sendJSON(res, 200, { cards, rarities: RARITIES, series: SERIES });
+  }
 
   // uploaded meme images
   const memeFile = p.match(/^\/memes\/([^/]+)$/);
@@ -399,7 +514,11 @@ async function handle(req, res) {
     const target = targetId && store.getUser(targetId);
     if (!target) return err(res, 404, 'user not found');
     const cards = store.listByOwner(target.id).map(instOut);
-    return sendJSON(res, 200, { user: publicUser(target), cards });
+    const showcase = JSON.parse(target.showcase || '[]').filter((id) => {
+      const inst = store.getInstance(id);
+      return inst && inst.ownerId === target.id; // drop pins for cards that changed hands
+    });
+    return sendJSON(res, 200, { user: publicUser(target), cards, showcase });
   }
 
   // static frontend is public; everything below requires login
@@ -431,7 +550,7 @@ async function handle(req, res) {
   if (sellMatch && req.method === 'POST') {
     const inst = store.getInstance(sellMatch[1]);
     if (!inst || inst.ownerId !== me.id) return err(res, 404, 'card not found in your binder');
-    if (store.lockedInstanceIds().has(inst.id)) return err(res, 400, 'card is locked in a pending trade');
+    if (store.lockedInstanceIds().has(inst.id)) return err(res, 400, 'card is locked in a pending trade or market listing');
     const value = instValue(inst);
     store.deleteInstance(inst.id);
     store.setNeurons(me.id, me.neurons + value);
@@ -568,6 +687,228 @@ async function handle(req, res) {
       store.resolveTrade(t.id, action === 'decline' ? 'declined' : 'cancelled');
     }
     return sendJSON(res, 200, { trade: tradeOut(store.getTrade(id)), unlocked: unlocked.map(achOut), neurons: store.getUser(me.id).neurons });
+  }
+
+  // ── battles ──
+  if (p === '/api/battles' && req.method === 'GET') {
+    const mine = store.listBattlesFor(me.id).map(battleOut);
+    const names = {};
+    for (const b of mine) {
+      for (const id of [b.fromId, b.toId]) {
+        if (names[id]) continue;
+        const u = store.getUser(id);
+        if (u) names[id] = { name: u.name, avatar: u.avatar, bot: Boolean(u.bot) };
+      }
+    }
+    return sendJSON(res, 200, { battles: mine, users: names });
+  }
+
+  if (p === '/api/battles' && req.method === 'POST') {
+    const { toId, team, wager = 0 } = await readBody(req);
+    const target = store.getUser(toId);
+    if (!target || target.id === me.id) return err(res, 400, 'invalid opponent');
+    const w = Math.floor(Number(wager)) || 0;
+    if (w < 0 || w > MAX_WAGER) return err(res, 400, `wager must be 0–${MAX_WAGER} neurons`);
+    if (me.neurons < w) return err(res, 400, 'you cannot stake neurons you do not have');
+    const myTeam = buildTeam(me, team);
+    if (!myTeam) return err(res, 400, 'pick exactly 3 different cards you own');
+
+    let b = store.createBattle({
+      fromId: me.id, toId: target.id, wager: w, status: 'pending',
+      state: {
+        teams: { [me.id]: myTeam, [target.id]: null },
+        active: { [me.id]: 0, [target.id]: 0 },
+        turn: null,
+        log: [`${me.name} challenges ${target.name}${w ? ` for ⚡${w}` : ''}!`],
+      },
+    });
+
+    let unlocked = [];
+    if (target.bot) {
+      const botIds = botTeamIds(target);
+      if (!botIds || target.neurons < w) {
+        b.status = 'declined';
+        battle.log(b.state, `${target.name} ducks out of the challenge. 🐔`);
+      } else {
+        store.setNeurons(me.id, me.neurons - w);
+        store.setNeurons(target.id, target.neurons - w);
+        activateBattle(b, buildTeam(target, botIds));
+        const finished = runBotTurns(b);
+        if (finished) unlocked = finished[me.id];
+      }
+      store.saveBattle(b);
+    }
+    return sendJSON(res, 200, { battle: battleOut(b), unlocked: unlocked.map(achOut), neurons: store.getUser(me.id).neurons });
+  }
+
+  const battleGet = p.match(/^\/api\/battles\/([^/]+)$/);
+  if (battleGet && req.method === 'GET') {
+    const b = store.getBattle(battleGet[1]);
+    if (!b || (b.fromId !== me.id && b.toId !== me.id)) return err(res, 404, 'battle not found');
+    const names = {};
+    for (const id of [b.fromId, b.toId]) {
+      const u = store.getUser(id);
+      if (u) names[id] = { name: u.name, avatar: u.avatar, bot: Boolean(u.bot) };
+    }
+    return sendJSON(res, 200, { battle: battleOut(b), users: names });
+  }
+
+  const battleAction = p.match(/^\/api\/battles\/([^/]+)\/(accept|decline|cancel|move)$/);
+  if (battleAction && req.method === 'POST') {
+    const [, id, action] = battleAction;
+    const b = store.getBattle(id);
+    if (!b || (b.fromId !== me.id && b.toId !== me.id)) return err(res, 404, 'battle not found');
+    let unlocked = [];
+
+    if (action === 'accept' || action === 'decline') {
+      if (b.status !== 'pending') return err(res, 400, 'battle already started or resolved');
+      if (b.toId !== me.id) return err(res, 403, 'only the challenged player can respond');
+      if (action === 'decline') {
+        b.status = 'declined';
+      } else {
+        const { team } = await readBody(req);
+        const myTeam = buildTeam(me, team);
+        if (!myTeam) return err(res, 400, 'pick exactly 3 different cards you own');
+        if (me.neurons < b.wager) return err(res, 400, `you need ⚡${b.wager} to match the wager`);
+        const challenger = store.getUser(b.fromId);
+        if (challenger.neurons < b.wager) {
+          b.status = 'cancelled';
+          battle.log(b.state, 'Challenge fizzled — the challenger spent their stake.');
+          store.saveBattle(b);
+          return err(res, 409, 'the challenger no longer has the wagered neurons');
+        }
+        store.setNeurons(me.id, me.neurons - b.wager);
+        store.setNeurons(challenger.id, challenger.neurons - b.wager);
+        activateBattle(b, myTeam);
+      }
+    } else if (action === 'cancel') {
+      if (b.status !== 'pending') return err(res, 400, 'battle already started or resolved');
+      if (b.fromId !== me.id) return err(res, 403, 'only the challenger can cancel');
+      b.status = 'cancelled';
+    } else { // move
+      if (b.status !== 'active') return err(res, 400, 'battle is not active');
+      const body = await readBody(req);
+      const oppId = me.id === b.fromId ? b.toId : b.fromId;
+      if (body.type === 'forfeit') {
+        battle.log(b.state, `${me.name} forfeits. 🏳️`);
+        unlocked = finishBattle(b, oppId)[me.id];
+      } else {
+        if (b.state.turn !== me.id) return err(res, 400, 'not your turn');
+        if (body.type === 'swap') {
+          const idx = Number(body.index);
+          const team = b.state.teams[me.id];
+          if (!Number.isInteger(idx) || !team[idx] || team[idx].hp <= 0 || idx === b.state.active[me.id])
+            return err(res, 400, 'invalid swap');
+          b.state.active[me.id] = idx;
+          battle.log(b.state, `${me.name} swaps in ${team[idx].name}!`);
+          b.state.turn = oppId;
+        } else if (body.type === 'attack') {
+          const moveIdx = body.move === 1 ? 1 : 0;
+          const wiped = battle.attack(b.state, me.id, oppId, moveIdx);
+          if (wiped) unlocked = finishBattle(b, me.id)[me.id];
+          else b.state.turn = oppId;
+        } else {
+          return err(res, 400, 'unknown move');
+        }
+        if (b.status === 'active') {
+          const finished = runBotTurns(b);
+          if (finished) unlocked = finished[me.id];
+        }
+      }
+    }
+    store.saveBattle(b);
+    return sendJSON(res, 200, { battle: battleOut(b), unlocked: unlocked.map(achOut), neurons: store.getUser(me.id).neurons });
+  }
+
+  // ── marketplace ──
+  if (p === '/api/market' && req.method === 'GET') {
+    const listings = store.activeListings().map((l) => {
+      const inst = store.getInstance(l.instanceId);
+      return inst && inst.ownerId === l.sellerId
+        ? { id: l.id, price: l.price, sellerId: l.sellerId, sellerName: l.sellerName, sellerAvatar: l.sellerAvatar, createdAt: l.createdAt, card: instOut(inst) }
+        : null;
+    }).filter(Boolean);
+    return sendJSON(res, 200, { listings });
+  }
+
+  if (p === '/api/market' && req.method === 'POST') {
+    const { instanceId, price } = await readBody(req);
+    const inst = store.getInstance(instanceId);
+    if (!inst || inst.ownerId !== me.id) return err(res, 404, 'card not found in your binder');
+    if (store.lockedInstanceIds().has(inst.id)) return err(res, 400, 'card is already listed or locked in a trade');
+    const pr = Math.floor(Number(price));
+    if (!Number.isFinite(pr) || pr < 1 || pr > 100000) return err(res, 400, 'price must be 1–100000 neurons');
+    const listing = store.createListing({ instanceId: inst.id, sellerId: me.id, price: pr });
+    return sendJSON(res, 200, { listing });
+  }
+
+  const marketAction = p.match(/^\/api\/market\/([^/]+)\/(buy|cancel)$/);
+  if (marketAction && req.method === 'POST') {
+    const l = store.getListing(marketAction[1]);
+    if (!l || l.status !== 'active') return err(res, 404, 'listing not found');
+    if (marketAction[2] === 'cancel') {
+      if (l.sellerId !== me.id) return err(res, 403, 'not your listing');
+      store.resolveListing(l.id, 'cancelled');
+      return sendJSON(res, 200, { ok: true });
+    }
+    if (l.sellerId === me.id) return err(res, 400, 'that is your own listing');
+    if (me.neurons < l.price) return err(res, 400, `not enough neurons — this card costs ⚡${l.price}`);
+    const inst = store.getInstance(l.instanceId);
+    if (!inst || inst.ownerId !== l.sellerId) {
+      store.resolveListing(l.id, 'cancelled');
+      return err(res, 409, 'that card is gone — listing removed');
+    }
+    const seller = store.getUser(l.sellerId);
+    store.transferInstance(inst.id, me.id);
+    store.setNeurons(me.id, me.neurons - l.price);
+    store.setNeurons(seller.id, seller.neurons + l.price);
+    store.resolveListing(l.id, 'sold', me.id);
+    store.bumpStat(seller.id, 'marketSales');
+    checkAchievements(store.getUser(seller.id));
+    const unlocked = checkAchievements(me);
+    return sendJSON(res, 200, { ok: true, neurons: store.getUser(me.id).neurons, unlocked: unlocked.map(achOut) });
+  }
+
+  // ── showcase (pinned cards on your public binder) ──
+  if (p === '/api/showcase' && req.method === 'POST') {
+    const { instanceIds } = await readBody(req);
+    if (!Array.isArray(instanceIds)) return err(res, 400, 'instanceIds required');
+    const clean = [...new Set(instanceIds)].slice(0, 6);
+    for (const id of clean) {
+      const inst = store.getInstance(id);
+      if (!inst || inst.ownerId !== me.id) return err(res, 400, 'you can only pin cards you own');
+    }
+    store.setShowcase(me.id, clean);
+    return sendJSON(res, 200, { ok: true, showcase: clean });
+  }
+
+  // ── meme of the week ──
+  if (p === '/api/vote' && req.method === 'GET') {
+    resolveWeeklyVote();
+    const week = weekKey();
+    const counts = Object.fromEntries(store.votesForWeek(week).map((r) => [r.memeId, r.n]));
+    const candidates = store.memesByStatus('approved')
+      .map((m) => ({ id: m.id, name: m.name, file: m.file, rarity: m.rarity, submitterId: m.submitterId, submitterName: m.submitterName, votes: counts[m.id] || 0 }))
+      .sort((a, b) => b.votes - a.votes)
+      .slice(0, 30);
+    let lastWinner = null;
+    const row = store.latestWinner();
+    if (row) {
+      const m = store.getMeme(row.memeId);
+      const u = store.getUser(row.submitterId);
+      if (m) lastWinner = { week: row.week, name: m.name, file: m.file, rarity: m.rarity, submitterName: u ? u.name : '???' };
+    }
+    return sendJSON(res, 200, { week, candidates, myVote: store.myVote(week, me.id), lastWinner });
+  }
+
+  if (p === '/api/vote' && req.method === 'POST') {
+    resolveWeeklyVote();
+    const { memeId } = await readBody(req);
+    const meme = store.getMeme(memeId);
+    if (!meme || meme.status !== 'approved') return err(res, 404, 'meme not found');
+    if (meme.submitterId === me.id) return err(res, 400, 'no voting for your own meme, gremlin');
+    store.castVote(weekKey(), me.id, meme.id);
+    return sendJSON(res, 200, { ok: true, myVote: meme.id });
   }
 
   if (p.startsWith('/api/') || p.startsWith('/auth/')) return err(res, 404, 'no such endpoint');

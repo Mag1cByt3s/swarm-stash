@@ -8,6 +8,10 @@ Trade **Neuro-sama** & **Evil Neuro** meme cards with the swarm — like Pokémo
 - 🏆 **Achievements** with neuron payouts: pack milestones, trading, foil hunting, and a reward for completing each series
 - 👑 **Leaderboard** under the new Ranks tab: swarm clout = binder value (foils ×4) + ⚡100 per achievement (bots don't rank)
 - 🤝 Browse other members' binders and propose card-for-card trades (up to 6 per side)
+- ⚔️ **Arena**: Pokémon-style turn-based battles — pick 3 cards, stats & a special move derive from each card's hash (foils fight 10% harder), every series beats another in a cycle, optional neuron wager. Bots accept and play instantly; humans battle via challenges
+- 💰 **Market**: list cards for neurons; listed cards are locked until sold or delisted
+- 📌 **Showcase**: pin up to 6 cards to the top of your public binder
+- 🗳️ **Meme of the Week**: weekly vote over community memes — the winner's card gets a permanent rarity upgrade and its creator earns ⚡250
 - 🖼️ **Meme submission portal**: players upload real memes (PNG/JPG/GIF/WEBP, max 5MB) which get minted as tradeable cards in the "Swarm Memes" series — credited to the submitter, who receives 2 copies
 - 😈 "Corrupt" the whole site into Evil Neuro mode with the theme toggle
 - 🤖 Four seeded swarm bots with collections respond to trades instantly — they accept any fair-value offer
