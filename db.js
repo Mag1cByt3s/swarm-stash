@@ -1,11 +1,9 @@
 // SQLite storage layer (node:sqlite — built into Node ≥22.13, zero dependencies).
-// Migrates a legacy data/db.json automatically on first run.
 
 const { DatabaseSync } = require('node:sqlite');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { CARDS } = require('./catalog');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -21,7 +19,7 @@ db.exec(`
     name      TEXT NOT NULL,
     avatar    TEXT NOT NULL,
     bot       INTEGER NOT NULL DEFAULT 0,
-    neurons   INTEGER NOT NULL DEFAULT 0,
+    neuros    INTEGER NOT NULL DEFAULT 0,
     lastDaily INTEGER NOT NULL DEFAULT 0,
     createdAt INTEGER NOT NULL
   );
@@ -114,16 +112,16 @@ db.exec(`
   );
 `);
 
-// foil variants were added after launch — patch older databases in place
-try { db.exec(`ALTER TABLE inventory ADD COLUMN foil INTEGER NOT NULL DEFAULT 0`); } catch { /* column exists */ }
-// showcase (pinned cards) came even later
-try { db.exec(`ALTER TABLE users ADD COLUMN showcase TEXT NOT NULL DEFAULT '[]'`); } catch { /* column exists */ }
+// in-place schema upgrades for databases created by earlier versions
+try { db.exec(`ALTER TABLE inventory ADD COLUMN foil INTEGER NOT NULL DEFAULT 0`); } catch { /* up to date */ }
+try { db.exec(`ALTER TABLE users ADD COLUMN showcase TEXT NOT NULL DEFAULT '[]'`); } catch { /* up to date */ }
+try { db.exec(`ALTER TABLE users RENAME COLUMN neurons TO neuros`); } catch { /* up to date */ }
 
 const newId = (prefix) => `${prefix}_${crypto.randomBytes(6).toString('hex')}`;
 
 // ─── prepared statements ─────────────────────────────────────────────────────
 const q = {
-  insertUser: db.prepare(`INSERT INTO users (id, discordId, name, avatar, bot, neurons, lastDaily, createdAt)
+  insertUser: db.prepare(`INSERT INTO users (id, discordId, name, avatar, bot, neuros, lastDaily, createdAt)
                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`),
   getUser: db.prepare(`SELECT * FROM users WHERE id = ?`),
   getUserByDiscord: db.prepare(`SELECT * FROM users WHERE discordId = ?`),
@@ -131,8 +129,8 @@ const q = {
   getUserByName: db.prepare(`SELECT * FROM users WHERE name = ?`),
   listUsers: db.prepare(`SELECT * FROM users`),
   setProfile: db.prepare(`UPDATE users SET name = ?, avatar = ? WHERE id = ?`),
-  setNeurons: db.prepare(`UPDATE users SET neurons = ? WHERE id = ?`),
-  setDaily: db.prepare(`UPDATE users SET neurons = ?, lastDaily = ? WHERE id = ?`),
+  setNeuros: db.prepare(`UPDATE users SET neuros = ? WHERE id = ?`),
+  setDaily: db.prepare(`UPDATE users SET neuros = ?, lastDaily = ? WHERE id = ?`),
   userCounts: db.prepare(`SELECT COUNT(*) AS cardCount, COUNT(DISTINCT cardId) AS uniqueCount FROM inventory WHERE ownerId = ?`),
 
   insertInstance: db.prepare(`INSERT INTO inventory (id, cardId, ownerId, obtainedAt, foil) VALUES (?, ?, ?, ?, ?)`),
@@ -201,9 +199,9 @@ const rowToBattle = (r) => r && { ...r, state: JSON.parse(r.state) };
 const store = {
   newId,
 
-  createUser({ discordId = null, name, avatar, bot = false, neurons = 0 }) {
-    const user = { id: newId('u'), discordId, name, avatar, bot: bot ? 1 : 0, neurons, lastDaily: 0, createdAt: Date.now() };
-    q.insertUser.run(user.id, user.discordId, user.name, user.avatar, user.bot, user.neurons, user.lastDaily, user.createdAt);
+  createUser({ discordId = null, name, avatar, bot = false, neuros = 0 }) {
+    const user = { id: newId('u'), discordId, name, avatar, bot: bot ? 1 : 0, neuros, lastDaily: 0, createdAt: Date.now() };
+    q.insertUser.run(user.id, user.discordId, user.name, user.avatar, user.bot, user.neuros, user.lastDaily, user.createdAt);
     return user;
   },
   getUser: (id) => q.getUser.get(id),
@@ -212,8 +210,8 @@ const store = {
   getUserByName: (name) => q.getUserByName.get(name),
   listUsers: () => q.listUsers.all(),
   setProfile: (id, name, avatar) => q.setProfile.run(name, avatar, id),
-  setNeurons: (id, neurons) => q.setNeurons.run(neurons, id),
-  claimDaily: (id, neurons, when) => q.setDaily.run(neurons, when, id),
+  setNeuros: (id, neuros) => q.setNeuros.run(neuros, id),
+  claimDaily: (id, neuros, when) => q.setDaily.run(neuros, when, id),
   userCounts: (id) => q.userCounts.get(id),
 
   grantCard(ownerId, cardId, foil = false) {
@@ -304,35 +302,5 @@ const store = {
     }
   },
 };
-
-// ─── one-time migration from the legacy JSON store ───────────────────────────
-(function migrateLegacyJSON() {
-  const legacyPath = path.join(DATA_DIR, 'db.json');
-  if (!fs.existsSync(legacyPath)) return;
-  if (q.listUsers.all().length > 0) return; // sqlite already populated
-  try {
-    const legacy = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
-    const knownCards = new Set(CARDS.map((c) => c.id));
-    db.exec('BEGIN');
-    for (const u of Object.values(legacy.users || {})) {
-      q.insertUser.run(u.id, u.discordId || null, u.name, u.avatar, u.bot ? 1 : 0, u.neurons | 0, u.lastDaily | 0, u.createdAt | 0);
-    }
-    let skipped = 0;
-    for (const i of Object.values(legacy.inventory || {})) {
-      if (!knownCards.has(i.cardId)) { skipped++; continue; } // card retired from the catalog
-      q.insertInstance.run(i.id, i.cardId, i.ownerId, i.obtainedAt | 0, 0);
-    }
-    for (const t of Object.values(legacy.trades || {})) {
-      q.insertTrade.run(t.id, t.fromId, t.toId, JSON.stringify(t.offer), JSON.stringify(t.request), t.message || '', t.createdAt | 0);
-      if (t.status !== 'pending') q.resolveTrade.run(t.status, t.resolvedAt || t.createdAt, t.id);
-    }
-    db.exec('COMMIT');
-    fs.renameSync(legacyPath, legacyPath + '.migrated');
-    console.log(`Migrated legacy db.json to SQLite${skipped ? ` (${skipped} cards from retired sets dropped)` : ''}.`);
-  } catch (e) {
-    db.exec('ROLLBACK');
-    console.error('Legacy db.json migration failed:', e.message);
-  }
-})();
 
 module.exports = store;

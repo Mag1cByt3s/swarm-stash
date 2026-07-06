@@ -24,7 +24,7 @@ const ACHIEVEMENTS = [
   { id: 'battle-10',  name: 'Arena Menace',       emoji: '🏟️', reward: 400,  desc: 'Win 10 battles',                  check: (ctx) => ctx.stat('battleWins') >= 10 },
   { id: 'merchant',   name: 'Entrepreneur',       emoji: '💰', reward: 50,   desc: 'Sell a card on the market',       check: (ctx) => ctx.stat('marketSales') >= 1 },
   { id: 'wotw',       name: 'Meme of the Week',   emoji: '🗳️', reward: 200,  desc: 'Win the weekly meme vote',        check: (ctx) => ctx.wotwWins >= 1 },
-  { id: 'rich',       name: 'Neuron Hoarder',     emoji: '⚡', reward: 0,    desc: 'Hold 1,000 neurons at once',      check: (ctx) => ctx.neurons >= 1000 },
+  { id: 'rich',       name: 'Neuro Hoarder',     emoji: '⚡', reward: 0,    desc: 'Hold 1,000 neuros at once',      check: (ctx) => ctx.neuros >= 1000 },
   { id: 'set-neuro',  name: 'Heart of the Swarm', emoji: '💗', reward: 600,  desc: 'Complete the Neuro-sama series',  check: setDone('neuro') },
   { id: 'set-evil',   name: 'Certified Evil',     emoji: '😈', reward: 400,  desc: 'Complete the Evil Neuro series',  check: setDone('evil') },
   { id: 'set-duo',    name: 'Double Trouble',     emoji: '👯', reward: 300,  desc: 'Complete The Twins series',       check: setDone('duo') },

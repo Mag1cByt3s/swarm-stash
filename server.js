@@ -5,7 +5,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { CARDS, RARITIES, SERIES, PACK_COST, PACK_SIZE, DAILY_NEURONS, STARTING_NEURONS, STARTER_CARDS, FOIL_CHANCE, FOIL_MULT } = require('./catalog');
+const { CARDS, RARITIES, SERIES, PACK_COST, PACK_SIZE, DAILY_NEUROS, STARTING_NEUROS, STARTER_CARDS, FOIL_CHANCE, FOIL_MULT } = require('./catalog');
 const { ACHIEVEMENTS } = require('./achievements');
 const battle = require('./battle');
 
@@ -142,19 +142,19 @@ function checkAchievements(user) {
     hasFoil: insts.some((i) => i.foil),
     hasLegendary: insts.some(isLegendary),
     hasFoilLegendary: insts.some((i) => i.foil && isLegendary(i)),
-    neurons: fresh.neurons,
+    neuros: fresh.neuros,
     approvedMemes: store.approvedCountBy(user.id),
     wotwWins: store.wotwWinsBy(user.id),
   };
   const unlocked = [];
-  let neurons = fresh.neurons;
+  let neuros = fresh.neuros;
   for (const a of ACHIEVEMENTS) {
     if (have.has(a.id) || !a.check(ctx)) continue;
     store.unlockAchievement(user.id, a.id);
-    neurons += a.reward;
+    neuros += a.reward;
     unlocked.push(a);
   }
-  if (neurons !== fresh.neurons) store.setNeurons(user.id, neurons);
+  if (neuros !== fresh.neuros) store.setNeuros(user.id, neuros);
   return unlocked;
 }
 const achOut = ({ id, name, emoji, desc, reward }) => ({ id, name, emoji, desc, reward });
@@ -218,7 +218,7 @@ function finishBattle(b, winnerId) {
   battle.log(b.state, `🏆 ${store.getUser(winnerId).name} wins the battle!`);
   if (b.wager > 0) {
     const w = store.getUser(winnerId);
-    store.setNeurons(winnerId, w.neurons + b.wager * 2);
+    store.setNeuros(winnerId, w.neuros + b.wager * 2);
     battle.log(b.state, `⚡${b.wager * 2} pot goes to the winner.`);
   }
   store.bumpStat(winnerId, 'battleWins');
@@ -259,7 +259,7 @@ function weekKey(d = new Date()) { // ISO week, e.g. 2026-W28
   return `${date.getUTCFullYear()}-W${String(Math.ceil(((date - yearStart) / 864e5 + 1) / 7)).padStart(2, '0')}`;
 }
 
-// Lazily crown last week's winner: +neurons for the submitter and the meme
+// Lazily crown last week's winner: +neuros for the submitter and the meme
 // card gets a permanent one-tier rarity upgrade.
 function resolveWeeklyVote() {
   const prev = weekKey(new Date(Date.now() - 7 * 864e5));
@@ -272,7 +272,7 @@ function resolveWeeklyVote() {
     if (up !== meme.rarity) store.setMemeRarity(meme.id, up);
     const sub = store.getUser(meme.submitterId);
     if (sub) {
-      store.setNeurons(sub.id, sub.neurons + WOTW_REWARD);
+      store.setNeuros(sub.id, sub.neuros + WOTW_REWARD);
       checkAchievements(store.getUser(sub.id));
     }
     return;
@@ -308,7 +308,7 @@ function seedBots() {
   for (const b of bots) {
     if (store.getUserByName(b.name)) continue;
     const user = store.createUser({
-      name: b.name, bot: true, neurons: 500,
+      name: b.name, bot: true, neuros: 500,
       avatar: `/api/avatar/${encodeURIComponent(b.name)}.svg`,
     });
     for (let i = 0; i < b.packs; i++) openPackFor(user);
@@ -416,7 +416,7 @@ async function handle(req, res) {
 
       let user = store.getUserByDiscord(d.id);
       if (!user) {
-        user = store.createUser({ discordId: d.id, name: d.global_name || d.username, avatar, neurons: STARTING_NEURONS });
+        user = store.createUser({ discordId: d.id, name: d.global_name || d.username, avatar, neuros: STARTING_NEUROS });
         for (const c of STARTER_CARDS) store.grantCard(user.id, c);
       } else {
         store.setProfile(user.id, d.global_name || d.username, avatar); // keep profile in sync with Discord
@@ -437,7 +437,7 @@ async function handle(req, res) {
     if (!clean) return err(res, 400, 'name required');
     let user = store.getDevUserByName(clean);
     if (!user) {
-      user = store.createUser({ name: clean, avatar: `/api/avatar/${encodeURIComponent(clean)}.svg`, neurons: STARTING_NEURONS });
+      user = store.createUser({ name: clean, avatar: `/api/avatar/${encodeURIComponent(clean)}.svg`, neuros: STARTING_NEUROS });
       for (const c of STARTER_CARDS) store.grantCard(user.id, c);
     }
     res.writeHead(200, { 'Set-Cookie': sessionCookie(makeSession(user.id)), 'Content-Type': 'application/json' });
@@ -450,7 +450,7 @@ async function handle(req, res) {
   }
 
   // ── public API ──
-  if (p === '/api/config') return sendJSON(res, 200, { discord: DISCORD_ENABLED, devLogin: DEV_LOGIN, packCost: PACK_COST, packSize: PACK_SIZE, daily: DAILY_NEURONS, moderation: MODERATION, foilChance: FOIL_CHANCE, foilMult: FOIL_MULT });
+  if (p === '/api/config') return sendJSON(res, 200, { discord: DISCORD_ENABLED, devLogin: DEV_LOGIN, packCost: PACK_COST, packSize: PACK_SIZE, daily: DAILY_NEUROS, moderation: MODERATION, foilChance: FOIL_CHANCE, foilMult: FOIL_MULT });
   if (p === '/api/catalog') {
     const cards = allCards().map((c) => ({ ...c, combat: battle.statsFor(c) }));
     return sendJSON(res, 200, { cards, rarities: RARITIES, series: SERIES });
@@ -481,7 +481,7 @@ async function handle(req, res) {
   if (p === '/api/me') {
     if (!me) return sendJSON(res, 200, { user: null });
     return sendJSON(res, 200, { user: {
-      ...publicUser(me), neurons: me.neurons,
+      ...publicUser(me), neuros: me.neuros,
       dailyReady: Date.now() - me.lastDaily > 20 * 3600e3,
       isAdmin: isAdmin(me),
       modPending: isAdmin(me) ? store.pendingCount() : 0,
@@ -526,10 +526,10 @@ async function handle(req, res) {
   if (!me) return err(res, 401, 'login required');
 
   if (p === '/api/daily' && req.method === 'POST') {
-    if (Date.now() - me.lastDaily < 20 * 3600e3) return err(res, 429, 'Daily neurons already claimed. Come back later!');
-    store.claimDaily(me.id, me.neurons + DAILY_NEURONS, Date.now());
+    if (Date.now() - me.lastDaily < 20 * 3600e3) return err(res, 429, 'Daily neuros already claimed. Come back later!');
+    store.claimDaily(me.id, me.neuros + DAILY_NEUROS, Date.now());
     const unlocked = checkAchievements(me);
-    return sendJSON(res, 200, { neurons: store.getUser(me.id).neurons, gained: DAILY_NEURONS, unlocked: unlocked.map(achOut) });
+    return sendJSON(res, 200, { neuros: store.getUser(me.id).neuros, gained: DAILY_NEUROS, unlocked: unlocked.map(achOut) });
   }
 
   if (p === '/api/achievements' && req.method === 'GET') {
@@ -538,12 +538,12 @@ async function handle(req, res) {
   }
 
   if (p === '/api/packs/open' && req.method === 'POST') {
-    if (me.neurons < PACK_COST) return err(res, 400, `Not enough neurons — a pack costs ${PACK_COST}.`);
-    store.setNeurons(me.id, me.neurons - PACK_COST);
+    if (me.neuros < PACK_COST) return err(res, 400, `Not enough neuros — a pack costs ${PACK_COST}.`);
+    store.setNeuros(me.id, me.neuros - PACK_COST);
     store.bumpStat(me.id, 'packs');
     const pulls = openPackFor(me);
     const unlocked = checkAchievements(me);
-    return sendJSON(res, 200, { neurons: store.getUser(me.id).neurons, cards: pulls.map(instOut), unlocked: unlocked.map(achOut) });
+    return sendJSON(res, 200, { neuros: store.getUser(me.id).neuros, cards: pulls.map(instOut), unlocked: unlocked.map(achOut) });
   }
 
   const sellMatch = p.match(/^\/api\/cards\/([^/]+)\/sell$/);
@@ -553,10 +553,10 @@ async function handle(req, res) {
     if (store.lockedInstanceIds().has(inst.id)) return err(res, 400, 'card is locked in a pending trade or market listing');
     const value = instValue(inst);
     store.deleteInstance(inst.id);
-    store.setNeurons(me.id, me.neurons + value);
+    store.setNeuros(me.id, me.neuros + value);
     store.bumpStat(me.id, 'recycled');
     const unlocked = checkAchievements(me);
-    return sendJSON(res, 200, { neurons: store.getUser(me.id).neurons, gained: value, unlocked: unlocked.map(achOut) });
+    return sendJSON(res, 200, { neuros: store.getUser(me.id).neuros, gained: value, unlocked: unlocked.map(achOut) });
   }
 
   // ── meme submission portal ──
@@ -590,7 +590,7 @@ async function handle(req, res) {
     if (status === 'approved') for (let i = 0; i < APPROVAL_COPIES; i++) store.grantCard(me.id, id);
     const unlocked = status === 'approved' ? checkAchievements(me) : [];
     return sendJSON(res, 200, { id, rarity, status,
-      neurons: store.getUser(me.id).neurons, unlocked: unlocked.map(achOut),
+      neuros: store.getUser(me.id).neuros, unlocked: unlocked.map(achOut),
       note: status === 'approved'
         ? `Minted instantly as a ${rarity} card — ${APPROVAL_COPIES} copies are in your binder!`
         : 'Submitted for review. A moderator will take a look.' });
@@ -663,7 +663,7 @@ async function handle(req, res) {
       trade = botConsiderTrade(trade);
       if (trade.status === 'accepted') unlocked = tradeExecuted(trade)[me.id];
     }
-    return sendJSON(res, 200, { trade: tradeOut(trade), unlocked: unlocked.map(achOut), neurons: store.getUser(me.id).neurons });
+    return sendJSON(res, 200, { trade: tradeOut(trade), unlocked: unlocked.map(achOut), neuros: store.getUser(me.id).neuros });
   }
 
   const tradeAction = p.match(/^\/api\/trades\/([^/]+)\/(accept|decline|cancel)$/);
@@ -686,7 +686,7 @@ async function handle(req, res) {
     } else {
       store.resolveTrade(t.id, action === 'decline' ? 'declined' : 'cancelled');
     }
-    return sendJSON(res, 200, { trade: tradeOut(store.getTrade(id)), unlocked: unlocked.map(achOut), neurons: store.getUser(me.id).neurons });
+    return sendJSON(res, 200, { trade: tradeOut(store.getTrade(id)), unlocked: unlocked.map(achOut), neuros: store.getUser(me.id).neuros });
   }
 
   // ── battles ──
@@ -708,8 +708,8 @@ async function handle(req, res) {
     const target = store.getUser(toId);
     if (!target || target.id === me.id) return err(res, 400, 'invalid opponent');
     const w = Math.floor(Number(wager)) || 0;
-    if (w < 0 || w > MAX_WAGER) return err(res, 400, `wager must be 0–${MAX_WAGER} neurons`);
-    if (me.neurons < w) return err(res, 400, 'you cannot stake neurons you do not have');
+    if (w < 0 || w > MAX_WAGER) return err(res, 400, `wager must be 0–${MAX_WAGER} neuros`);
+    if (me.neuros < w) return err(res, 400, 'you cannot stake neuros you do not have');
     const myTeam = buildTeam(me, team);
     if (!myTeam) return err(res, 400, 'pick exactly 3 different cards you own');
 
@@ -726,19 +726,19 @@ async function handle(req, res) {
     let unlocked = [];
     if (target.bot) {
       const botIds = botTeamIds(target);
-      if (!botIds || target.neurons < w) {
+      if (!botIds || target.neuros < w) {
         b.status = 'declined';
         battle.log(b.state, `${target.name} ducks out of the challenge. 🐔`);
       } else {
-        store.setNeurons(me.id, me.neurons - w);
-        store.setNeurons(target.id, target.neurons - w);
+        store.setNeuros(me.id, me.neuros - w);
+        store.setNeuros(target.id, target.neuros - w);
         activateBattle(b, buildTeam(target, botIds));
         const finished = runBotTurns(b);
         if (finished) unlocked = finished[me.id];
       }
       store.saveBattle(b);
     }
-    return sendJSON(res, 200, { battle: battleOut(b), unlocked: unlocked.map(achOut), neurons: store.getUser(me.id).neurons });
+    return sendJSON(res, 200, { battle: battleOut(b), unlocked: unlocked.map(achOut), neuros: store.getUser(me.id).neuros });
   }
 
   const battleGet = p.match(/^\/api\/battles\/([^/]+)$/);
@@ -769,16 +769,16 @@ async function handle(req, res) {
         const { team } = await readBody(req);
         const myTeam = buildTeam(me, team);
         if (!myTeam) return err(res, 400, 'pick exactly 3 different cards you own');
-        if (me.neurons < b.wager) return err(res, 400, `you need ⚡${b.wager} to match the wager`);
+        if (me.neuros < b.wager) return err(res, 400, `you need ⚡${b.wager} to match the wager`);
         const challenger = store.getUser(b.fromId);
-        if (challenger.neurons < b.wager) {
+        if (challenger.neuros < b.wager) {
           b.status = 'cancelled';
           battle.log(b.state, 'Challenge fizzled — the challenger spent their stake.');
           store.saveBattle(b);
-          return err(res, 409, 'the challenger no longer has the wagered neurons');
+          return err(res, 409, 'the challenger no longer has the wagered neuros');
         }
-        store.setNeurons(me.id, me.neurons - b.wager);
-        store.setNeurons(challenger.id, challenger.neurons - b.wager);
+        store.setNeuros(me.id, me.neuros - b.wager);
+        store.setNeuros(challenger.id, challenger.neuros - b.wager);
         activateBattle(b, myTeam);
       }
     } else if (action === 'cancel') {
@@ -817,7 +817,7 @@ async function handle(req, res) {
       }
     }
     store.saveBattle(b);
-    return sendJSON(res, 200, { battle: battleOut(b), unlocked: unlocked.map(achOut), neurons: store.getUser(me.id).neurons });
+    return sendJSON(res, 200, { battle: battleOut(b), unlocked: unlocked.map(achOut), neuros: store.getUser(me.id).neuros });
   }
 
   // ── marketplace ──
@@ -837,7 +837,7 @@ async function handle(req, res) {
     if (!inst || inst.ownerId !== me.id) return err(res, 404, 'card not found in your binder');
     if (store.lockedInstanceIds().has(inst.id)) return err(res, 400, 'card is already listed or locked in a trade');
     const pr = Math.floor(Number(price));
-    if (!Number.isFinite(pr) || pr < 1 || pr > 100000) return err(res, 400, 'price must be 1–100000 neurons');
+    if (!Number.isFinite(pr) || pr < 1 || pr > 100000) return err(res, 400, 'price must be 1–100000 neuros');
     const listing = store.createListing({ instanceId: inst.id, sellerId: me.id, price: pr });
     return sendJSON(res, 200, { listing });
   }
@@ -852,7 +852,7 @@ async function handle(req, res) {
       return sendJSON(res, 200, { ok: true });
     }
     if (l.sellerId === me.id) return err(res, 400, 'that is your own listing');
-    if (me.neurons < l.price) return err(res, 400, `not enough neurons — this card costs ⚡${l.price}`);
+    if (me.neuros < l.price) return err(res, 400, `not enough neuros — this card costs ⚡${l.price}`);
     const inst = store.getInstance(l.instanceId);
     if (!inst || inst.ownerId !== l.sellerId) {
       store.resolveListing(l.id, 'cancelled');
@@ -860,13 +860,13 @@ async function handle(req, res) {
     }
     const seller = store.getUser(l.sellerId);
     store.transferInstance(inst.id, me.id);
-    store.setNeurons(me.id, me.neurons - l.price);
-    store.setNeurons(seller.id, seller.neurons + l.price);
+    store.setNeuros(me.id, me.neuros - l.price);
+    store.setNeuros(seller.id, seller.neuros + l.price);
     store.resolveListing(l.id, 'sold', me.id);
     store.bumpStat(seller.id, 'marketSales');
     checkAchievements(store.getUser(seller.id));
     const unlocked = checkAchievements(me);
-    return sendJSON(res, 200, { ok: true, neurons: store.getUser(me.id).neurons, unlocked: unlocked.map(achOut) });
+    return sendJSON(res, 200, { ok: true, neuros: store.getUser(me.id).neuros, unlocked: unlocked.map(achOut) });
   }
 
   // ── showcase (pinned cards on your public binder) ──

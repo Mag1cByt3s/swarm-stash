@@ -146,7 +146,7 @@ a { color: var(--accent-2); }
   border-radius: 12px; padding: 7px 12px;
   font-family: var(--font-mono); font-weight: 700; font-size: 14px;
 }
-.neuron-icon { color: var(--cream); filter: drop-shadow(0 0 6px var(--cream)); }
+.neuro-icon { color: var(--cream); filter: drop-shadow(0 0 6px var(--cream)); }
 #daily-btn {
   background: color-mix(in oklab, var(--cream) 18%, transparent);
   border: 1px solid color-mix(in oklab, var(--cream) 45%, transparent);

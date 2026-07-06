@@ -139,9 +139,9 @@ function zoomCard(card, foil) {
 
 // Shared handling for endpoints that may pay out achievements
 function handleUnlocks(r) {
-  if (r.neurons != null && state.me) {
-    state.me.neurons = r.neurons;
-    $('#neuron-count').textContent = r.neurons;
+  if (r.neuros != null && state.me) {
+    state.me.neuros = r.neuros;
+    $('#neuro-count').textContent = r.neuros;
   }
   for (const a of r.unlocked || []) {
     toast(`${a.emoji} Achievement unlocked: ${a.name}${a.reward ? ` · +⚡${a.reward}` : ''}`);
@@ -203,7 +203,7 @@ async function refreshMe() {
   $('#hero-login').classList.toggle('hidden', authed || !state.config.discord);
   $('#dev-login').classList.toggle('hidden', authed || !state.config.devLogin);
   if (authed) {
-    $('#neuron-count').textContent = user.neurons;
+    $('#neuro-count').textContent = user.neuros;
     $('#user-name').textContent = user.name;
     $('#user-avatar').src = user.avatar;
     $('#daily-btn').classList.toggle('hidden', !user.dailyReady);
@@ -232,7 +232,7 @@ $('#daily-btn').addEventListener('click', async () => {
   try {
     const r = await api('/api/daily', { method: 'POST' });
     $('#daily-btn').classList.add('hidden');
-    toast(`⚡ +${r.gained} daily neurons claimed!`);
+    toast(`⚡ +${r.gained} daily neuros claimed!`);
     handleUnlocks(r);
   } catch (err) { toast(err.message, true); }
 });
@@ -363,7 +363,7 @@ async function renderBinder() {
     actions.className = 'card-actions';
     const sell = document.createElement('button');
     sell.textContent = `recycle · ⚡${value}`;
-    sell.title = insts.length > 1 ? 'Recycle one copy for neurons' : 'Recycle this card for neurons';
+    sell.title = insts.length > 1 ? 'Recycle one copy for neuros' : 'Recycle this card for neuros';
     sell.onclick = async () => {
       const label = foil ? `foil "${card.name}"` : `"${card.name}"`;
       if (insts.length === 1 && !confirm(`Recycle your only ${label} for ⚡${value}?`)) return;
@@ -380,7 +380,7 @@ async function renderBinder() {
     list.textContent = 'sell 💰';
     list.title = 'List one copy on the market';
     list.onclick = async () => {
-      const input = prompt(`List "${card.name}"${foil ? ' (foil)' : ''} on the market for how many neurons?`, value * 2);
+      const input = prompt(`List "${card.name}"${foil ? ' (foil)' : ''} on the market for how many neuros?`, value * 2);
       if (input === null) return;
       const price = Math.floor(Number(input));
       if (!price || price < 1) return toast('enter a valid price', true);
