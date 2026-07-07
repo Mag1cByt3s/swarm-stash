@@ -22,9 +22,15 @@ Zero npm dependencies — plain Node ≥22.13, SQLite storage (built-in `node:sq
 ## Run it
 
 ```bash
+./setup.sh              # any distro/macOS: installs Node ≥22.13 if needed, writes .env, starts
+# or, if you already have Node ≥22.13:
 node server.js          # → http://localhost:3000
 # on NixOS: nix run .    (or: nix-shell -p nodejs_22 --run "node server.js")
 ```
+
+`setup.sh` tries your package manager first (apt/dnf/pacman/zypper/apk/brew) and otherwise
+drops the official Node build into `./.node` — no root needed. `./setup.sh --service`
+additionally installs a systemd **user** service; `--help` lists all options.
 
 ## Nix flake
 

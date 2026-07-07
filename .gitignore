@@ -12,3 +12,6 @@ result-*
 node_modules/
 nohup.out
 *.log
+
+# local Node runtime installed by setup.sh
+.node/
