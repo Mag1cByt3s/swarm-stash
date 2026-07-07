@@ -15,9 +15,9 @@ export interface Card {
 
 export const RARITIES: Record<Rarity, { weight: number; value: number; label: string }> = {
   common:    { weight: 54,  value: 10,  label: 'Common' },
-  uncommon:  { weight: 26,  value: 25,  label: 'Uncommon' },
-  rare:      { weight: 13,  value: 60,  label: 'Rare' },
-  epic:      { weight: 5.5, value: 150, label: 'Epic' },
+  uncommon:  { weight: 26,  value: 20,  label: 'Uncommon' },
+  rare:      { weight: 13,  value: 50,  label: 'Rare' },
+  epic:      { weight: 5.5, value: 125, label: 'Epic' },
   legendary: { weight: 1.5, value: 500, label: 'Legendary' },
 };
 
