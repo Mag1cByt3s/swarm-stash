@@ -4,44 +4,44 @@
 'use strict';
 
 // ─── shared shapes (mirror the server's API responses) ───────────────────────
-interface CardT {
-  id: string; name: string; series: string; rarity: string;
-  emoji?: string; flavor?: string; image?: string;
-  combat?: { maxHp: number; atk: number; def: number; spd: number;
-             special: { type: string; name: string; desc: string } };
-}
-interface InstT { instanceId: string; cardId: string; ownerId: string; obtainedAt: number; foil: boolean }
-interface FighterT {
-  cardId: string; name: string; series: string; rarity: string; foil: boolean;
-  maxHp: number; atk: number; def: number; spd: number; hp: number; defMod: number;
-  basicName: string; special: { type: string; name: string; desc: string };
-}
-interface AchievementT { id: string; name: string; emoji: string; desc: string; reward: number }
+                 
+                                                           
+                                                  
+                                                                  
+                                                                     
+ 
+                                                                                                          
+                    
+                                                                              
+                                                                                   
+                                                                           
+ 
+                                                                                                
 
 // DOM helpers return `any` on purpose: the SPA reaches for .value/.src/.dataset
 // on hundreds of elements and per-site casts would drown the code. Annotate at
 // the use site when it matters.
-const $ = (s: string, el: ParentNode = document): any => el.querySelector(s);
-const $$ = (s: string, el: ParentNode = document): any[] => [...el.querySelectorAll(s)];
+const $ = (s        , el             = document)      => el.querySelector(s);
+const $$ = (s        , el             = document)        => [...el.querySelectorAll(s)];
 
-const state: {
-  me: any; config: any;
-  cards: CardT[]; rarities: Record<string, { weight: number; value: number; label: string }>;
-  series: Record<string, { label: string; hue: number; hue2: number }>;
-  collection: InstT[]; showcase: string[]; trades: any[]; tradeUsers: Record<string, any>;
-  battles: any[]; battleUsers: Record<string, any>; battle: { data: any; users: Record<string, any> } | null;
-  view: string; member: { user: any; cards: InstT[] } | null;
-} = {
+const state   
+                       
+                                                                                             
+                                                                       
+                                                                                          
+                                                                                                             
+                                                             
+  = {
   me: null, config: null,
   cards: [], rarities: {}, series: {},
   collection: [], showcase: [], trades: [], tradeUsers: {},
   battles: [], battleUsers: {}, battle: null,
   view: 'home', member: null,
 };
-const cardById = (): Record<string, CardT> => Object.fromEntries(state.cards.map((c) => [c.id, c]));
+const cardById = ()                        => Object.fromEntries(state.cards.map((c) => [c.id, c]));
 
 // ─── API helper ──────────────────────────────────────────────────────────────
-async function api(path: string, opts: { method?: string; body?: unknown } = {}): Promise<any> {
+async function api(path        , opts                                      = {})               {
   const res = await fetch(path, {
     headers: opts.body ? { 'Content-Type': 'application/json' } : {},
     method: opts.method,
@@ -52,7 +52,7 @@ async function api(path: string, opts: { method?: string; body?: unknown } = {})
   return data;
 }
 
-function toast(msg: string, isError = false): void {
+function toast(msg        , isError = false)       {
   const el = document.createElement('div');
   el.className = 'toast' + (isError ? ' error' : '');
   el.textContent = msg;
@@ -65,8 +65,8 @@ function toast(msg: string, isError = false): void {
 // throw "prompt() is not supported" instead of just no-oping. This renders
 // the same request as a small modal and resolves with the entered value, or
 // null on cancel — same contract as window.prompt so call sites barely change.
-function askPrompt({ title = 'Enter a value', message = '', value = '', min, max }:
-                   { title?: string; message?: string; value?: string | number; min?: number; max?: number } = {}): Promise<string | null> {
+function askPrompt({ title = 'Enter a value', message = '', value = '', min, max } 
+                                                                                                             = {})                         {
   const overlay = $('#prompt-overlay');
   const input = $('#prompt-input');
   $('#prompt-title').textContent = title;
@@ -87,7 +87,7 @@ function askPrompt({ title = 'Enter a value', message = '', value = '', min, max
     };
     const onOk = () => { cleanup(); resolve(input.value); };
     const onCancel = () => { cleanup(); resolve(null); };
-    const onKey = (e: KeyboardEvent) => {
+    const onKey = (e               ) => {
       if (e.key === 'Enter') { e.preventDefault(); onOk(); }
       if (e.key === 'Escape') onCancel();
     };
@@ -172,7 +172,7 @@ function cardSVG(card) {
 
 const RETIRED_CARD = { id: 'retired', name: 'Retired Card', series: 'neuro', rarity: 'common', emoji: '❓', flavor: 'This meme was lost to the archives. F in chat.' };
 
-function cardEl(card: CardT, { qty, onClick, foil }: { qty?: number; onClick?: () => void; foil?: boolean } = {}) {
+function cardEl(card       , { qty, onClick, foil }                                                         = {}) {
   card = card || RETIRED_CARD;
   const el = document.createElement('div');
   el.className = `tcg-card r-${card.rarity}` + (foil ? ' foil' : '');
@@ -192,7 +192,7 @@ function statLine(card, foil) {
   return `<div class="stat-line">♥${v(c.maxHp)} ⚔${v(c.atk)} 🛡${v(c.def)} ⚡${v(c.spd)} · <span class="special-name" title="${esc(c.special.desc)}">${esc(c.special.name)}</span></div>`;
 }
 
-function zoomCard(card: CardT, foil?: boolean) {
+function zoomCard(card       , foil          ) {
   const overlay = $('#zoom-overlay');
   overlay.classList.remove('closing');
   const stats = document.createElement('div');
@@ -260,7 +260,7 @@ function goToLogin() {
 }
 
 document.addEventListener('click', (e) => {
-  const t = (e.target as HTMLElement).closest<HTMLElement>('[data-nav]');
+  const t = (e.target               ).closest             ('[data-nav]');
   if (!t) return;
   e.preventDefault();
   closeNavPanel();
@@ -1069,7 +1069,7 @@ async function refreshBattle() {
   } catch { /* transient network hiccup — next poll retries */ }
 }
 
-function fighterEl(f: FighterT, { active, onClick }: { active?: boolean; onClick?: () => void } = {}) {
+function fighterEl(f          , { active, onClick }                                             = {}) {
   const byId = cardById();
   const wrap = document.createElement('div');
   wrap.className = 'fighter' + (active ? ' active-fighter' : '') + (f.hp <= 0 ? ' fainted' : '');
@@ -1198,7 +1198,7 @@ $('#challenge-btn').addEventListener('click', () =>
   openBattleModal({ type: 'challenge', toId: state.member.user.id, name: state.member.user.name }));
 
 // ─── Market ──────────────────────────────────────────────────────────────────
-let auctionTickTimer: ReturnType<typeof setInterval> | undefined;
+let auctionTickTimer                                            ;
 
 function renderMarket() {
   return renderBuyNow();
@@ -1242,16 +1242,16 @@ async function renderBuyNow() {
 }
 
 // ─── Auction house ───────────────────────────────────────────────────────────
-interface AuctionT {
-  id: string; sellerId: string; sellerName: string; sellerAvatar: string;
-  startingBid: number; currentBid: number | null; bidCount: number;
-  currentBidderId: string | null; currentBidderName: string | null;
-  endsAt: number; createdAt: number; card: InstT;
-}
+                    
+                                                                         
+                                                                   
+                                                                   
+                                                 
+ 
 
 // Renders time-left as "3d 4h", "2h 15m", "48s" etc, down to the second so
 // the last stretch of a hot auction actually feels like it's ticking down.
-function fmtCountdown(ms: number): string {
+function fmtCountdown(ms        )         {
   if (ms <= 0) return 'ending…';
   const s = Math.floor(ms / 1000);
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);
@@ -1264,7 +1264,7 @@ function fmtCountdown(ms: number): string {
 
 async function renderAuctions() {
   clearInterval(auctionTickTimer);
-  const { auctions } = await api('/api/market/auctions') as { auctions: AuctionT[] };
+  const { auctions } = await api('/api/market/auctions')                            ;
   const byId = cardById();
   const grid = $('#auction-grid');
   grid.replaceChildren(...auctions.map((a, i) => {
@@ -1319,7 +1319,7 @@ async function renderAuctions() {
 
   const tick = () => {
     let anyDue = false;
-    Array.from(grid.querySelectorAll('.auction-countdown')).forEach((el: any) => {
+    Array.from(grid.querySelectorAll('.auction-countdown')).forEach((el     ) => {
       const msLeft = Number(el.dataset.ends) - Date.now();
       el.textContent = fmtCountdown(msLeft);
       el.classList.toggle('ending-soon', msLeft > 0 && msLeft < 5 * 60e3);
@@ -1332,7 +1332,7 @@ async function renderAuctions() {
 }
 
 // ─── Start-auction picker (single-card select) ──────────────────────────────
-const auctionPick = new Set<string>(); // capped at 1 — reuses the multi-select Set pattern
+const auctionPick = new Set        (); // capped at 1 — reuses the multi-select Set pattern
 
 $('#start-auction-btn').addEventListener('click', async () => {
   await loadCollection();

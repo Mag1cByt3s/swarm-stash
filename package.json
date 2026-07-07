@@ -6,8 +6,7 @@
   "main": "server.ts",
   "scripts": {
     "start": "node server.ts",
-    "build": "tsc -p tsconfig.frontend.json",
-    "check": "tsc -p tsconfig.json && tsc -p tsconfig.frontend.json --noEmit"
+    "check": "tsc -p tsconfig.json && tsc -p tsconfig.frontend.json"
   },
   "engines": {
     "node": ">=22.18"

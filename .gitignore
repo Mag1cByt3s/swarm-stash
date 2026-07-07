@@ -15,3 +15,6 @@ nohup.out
 
 # local Node runtime installed by setup.sh
 .node/
+
+# generated from public/app.ts at serve time — never commit
+public/app.js

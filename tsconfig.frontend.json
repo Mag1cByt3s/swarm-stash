@@ -1,17 +1,19 @@
 {
-  // Frontend config: public/app.ts compiles to public/app.js (committed, so
-  // the game still runs from a bare checkout with no build step). Looser than
-  // the server config — the SPA predates the TS conversion and gets tightened
-  // incrementally; new frontend code should still be written with types.
+  // Frontend config: typecheck only. public/app.ts is served by server.ts
+  // with the types stripped at request time (Node's stripTypeScriptTypes),
+  // so there is no emit and no committed artifact. erasableSyntaxOnly keeps
+  // the source inside what type stripping can handle (no enums/namespaces),
+  // and the target pins the syntax level browsers must parse. Looser than
+  // the server config — the SPA predates the TS conversion and gets
+  // tightened incrementally; new frontend code should still be typed.
   "compilerOptions": {
-    // app.ts is a classic browser script (no imports/exports), so the module
-    // setting never affects the emit — app.js lands next to app.ts.
     "target": "ES2022",
     "module": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": false,
     "noImplicitAny": false,
-    "removeComments": false
+    "erasableSyntaxOnly": true,
+    "noEmit": true
   },
   "include": ["public/app.ts"]
 }

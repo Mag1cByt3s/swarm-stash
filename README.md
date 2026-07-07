@@ -30,16 +30,16 @@ node server.ts          # → http://localhost:3000
 
 ## Development
 
-TypeScript is a dev-only dependency (typechecking + compiling the frontend):
+TypeScript is a dev-only dependency, used purely for typechecking:
 
 ```bash
 npm install             # pulls typescript + @types/node
 npm run check           # typecheck server (strict) and frontend
-npm run build           # recompile public/app.ts → public/app.js (committed)
 ```
 
-The browser loads the committed `public/app.js`, so players never need a build step —
-but if you edit `public/app.ts`, run `npm run build` before committing.
+There is no build step anywhere: the server runs its own `.ts` files natively, and it
+serves `public/app.ts` to browsers with the types stripped at request time (Node's
+built-in `stripTypeScriptTypes`). Edit `public/app.ts` and reload — that's it.
 
 `setup.sh` tries your package manager first (apt/dnf/pacman/zypper/apk/brew) and otherwise
 drops the official Node build into `./.node` — no root needed. `./setup.sh --service`
