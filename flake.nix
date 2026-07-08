@@ -10,30 +10,51 @@
     in
     {
       packages = forAllSystems (pkgs: rec {
-        swarm-stash = pkgs.stdenvNoCC.mkDerivation {
+        swarm-stash = pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
           pname = "swarm-stash";
           version = "1.0.0";
           src = ./.;
-          nativeBuildInputs = [ pkgs.makeWrapper ];
+          pnpmDeps = pkgs.fetchPnpmDeps {
+            inherit (finalAttrs) pname version src;
+            fetcherVersion = 3;
+            hash = "sha256-gXaUt1UbIvNWgB/wyDE6+yIqcHZBCZQMRiVvJUmVApo=";
+          };
+          nativeBuildInputs = [
+            pkgs.makeWrapper
+            pkgs.nodejs_22
+            pkgs.pnpm_11
+            pkgs.pnpmConfigHook
+          ];
+          buildPhase = ''
+            runHook preBuild
+            node_modules/.pnpm/esbuild@*/node_modules/esbuild/bin/esbuild server.tsx \
+              --bundle \
+              --platform=node \
+              --format=esm \
+              --target=node22 \
+              --packages=external \
+              --outdir=dist
+            runHook postBuild
+          '';
           installPhase = ''
             mkdir -p $out/share/swarm-stash $out/bin
-            cp -r *.ts lib routes public $out/share/swarm-stash/
+            cp -r dist *.ts *.tsx lib routes public package.json node_modules $out/share/swarm-stash/
             makeWrapper ${pkgs.nodejs_22}/bin/node $out/bin/swarm-stash \
-              --add-flags "$out/share/swarm-stash/server.ts" \
+              --add-flags "$out/share/swarm-stash/dist/server.js" \
               --set-default DATA_DIR ./data
           '';
           meta = {
             description = "Trade Neuro-sama & Evil Neuro meme cards with the swarm";
             mainProgram = "swarm-stash";
           };
-        };
+        });
         default = swarm-stash;
       });
 
       apps = forAllSystems (pkgs: rec {
         swarm-stash = {
           type = "app";
-          program = nixpkgs.lib.getExe self.packages.${pkgs.system}.swarm-stash;
+          program = nixpkgs.lib.getExe self.packages.${pkgs.stdenv.hostPlatform.system}.swarm-stash;
         };
         default = swarm-stash;
       });
@@ -52,7 +73,7 @@
 
             package = lib.mkOption {
               type = lib.types.package;
-              default = self.packages.${pkgs.system}.swarm-stash;
+              default = self.packages.${pkgs.stdenv.hostPlatform.system}.swarm-stash;
               description = "swarm-stash package to run.";
             };
 

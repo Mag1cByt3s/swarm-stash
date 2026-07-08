@@ -3,7 +3,7 @@
 // here instead of reaching into process.env themselves.
 //
 // NOTE: env.ts (which loads .env) must be imported before this module runs —
-// server.ts does that as its very first import.
+// server.tsx does that as its very first import.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,6 +14,7 @@ import type { UserRow } from '../db.ts';
 export const ROOT = path.join(import.meta.dirname, '..');
 
 export const PORT = Number(process.env.PORT || 3000);
+export const HOST = process.env.HOST || '0.0.0.0';
 export const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 export const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '';
 export const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || '';

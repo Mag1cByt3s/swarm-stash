@@ -40,23 +40,27 @@ export function siteRoutes(r: Router): void {
   });
 
   // uploaded meme images
-  r.get('/memes/:file', ({ res, params }) => {
+  r.get('/memes/:file', async ({ params }) => {
     const file = path.join(UPLOAD_DIR, path.basename(params.file!));
-    fs.readFile(file, (e, buf) => {
-      if (e) { res.writeHead(404); return res.end('not found'); }
+    try {
+      const buf = await fs.promises.readFile(file);
       const type = IMAGE_TYPES.find((t) => file.endsWith(t.ext));
-      res.writeHead(200, {
-        'Content-Type': type ? type.mime : 'application/octet-stream',
-        'X-Content-Type-Options': 'nosniff',
-        'Cache-Control': 'public, max-age=86400, immutable',
+      return new Response(buf, {
+        headers: {
+          'Content-Type': type ? type.mime : 'application/octet-stream',
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'public, max-age=86400, immutable',
+        },
       });
-      res.end(buf);
-    });
+    } catch {
+      return new Response('not found', { status: 404 });
+    }
   });
 
-  r.get('/api/avatar/:file', ({ res, params }) => {
-    if (!params.file!.endsWith('.svg')) { res.writeHead(404); return res.end('not found'); }
-    res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
-    res.end(avatarSVG(params.file!.slice(0, -4)));
+  r.get('/api/avatar/:file', ({ params }) => {
+    if (!params.file!.endsWith('.svg')) return new Response('not found', { status: 404 });
+    return new Response(avatarSVG(params.file!.slice(0, -4)), {
+      headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' },
+    });
   });
 }

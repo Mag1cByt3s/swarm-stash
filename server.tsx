@@ -1,24 +1,25 @@
-// Swarm Stash — entry point. Zero runtime dependencies: Node's built-in http
-// server and SQLite (node:sqlite), run directly as TypeScript via Node's
-// native type stripping.
+// Swarm Stash — entry point. Hono owns request routing and response rendering;
+// SQLite storage still uses Node's built-in node:sqlite.
 //
 // This file is only wiring. The actual behavior lives in:
 //   routes/   — one file per API area (auth, players, trades, battles, …)
 //   lib/      — shared plumbing (config, router, sessions, card pool, …)
 //   catalog.ts / achievements.ts / battle.ts — game content & combat rules
 //   db.ts     — SQLite storage layer
-//   public/   — the SPA (app.ts is served type-stripped as /app.js)
+//   public/   — static assets and browser TS modules served type-stripped
 
 import './env.ts'; // must load .env before any module reads config at import time
 
-import http from 'node:http';
+import { Hono } from 'hono';
+import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import store from './db.ts';
-import { PORT, BASE_URL, DISCORD_ENABLED, DEV_LOGIN } from './lib/config.ts';
+import { PORT, HOST, BASE_URL, DISCORD_ENABLED, DEV_LOGIN } from './lib/config.ts';
 import { Router } from './lib/router.ts';
-import { err } from './lib/http.ts';
-import { serveStatic } from './lib/static.ts';
-import { readSession } from './lib/session.ts';
+import { sessionMiddleware, type AppEnv } from './lib/session.ts';
+import { PUBLIC_DIR, serveStrippedTypeScript } from './lib/static.ts';
 import { seedBots } from './lib/bots.ts';
+import { AppDocument } from './routes/app.tsx';
 
 import { authRoutes } from './routes/auth.ts';
 import { siteRoutes } from './routes/site.ts';
@@ -41,24 +42,31 @@ marketRoutes(router);
 
 seedBots(); // so trading works out of the box
 
-async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<unknown> {
-  const url = new URL(req.url || '/', BASE_URL);
-  const match = router.match(req.method || 'GET', url.pathname);
-  if (!match) {
-    if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) return err(res, 404, 'no such endpoint');
-    return serveStatic(res, url.pathname); // everything else is the SPA
-  }
-  const me = readSession(req);
-  if (match.auth && !me) return err(res, 401, 'login required');
-  return match.handler({ req, res, url, params: match.params, me });
-}
+const app = new Hono<AppEnv>();
+app.use('*', sessionMiddleware);
+app.route('/', router.app);
+app.use('/js/*', async (c, next) => {
+  if (new URL(c.req.url).pathname.endsWith('.ts')) return serveStrippedTypeScript(c);
+  await next();
+});
+app.use('*', serveStatic({ root: PUBLIC_DIR }));
 
-http.createServer((req, res) => {
-  handle(req, res).catch((e: unknown) => {
-    console.error(`${req.method} ${req.url} →`, e);
-    if (!res.headersSent) err(res, 500, 'internal error');
-  });
-}).listen(PORT, () => {
+app.notFound(async (c) => {
+  const url = new URL(c.req.url);
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) {
+    return c.json({ error: 'no such endpoint' }, 404);
+  }
+
+  if (url.pathname.includes('.')) return c.text('not found', 404);
+  return c.html(<AppDocument />);
+});
+
+app.onError((e, c) => {
+  console.error(`${c.req.method} ${c.req.url} →`, e);
+  return c.json({ error: 'internal error' }, 500);
+});
+
+serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
   console.log(`🐝 Swarm Stash running at ${BASE_URL}`);
   console.log(`   Discord OAuth: ${DISCORD_ENABLED ? 'enabled' : 'NOT configured (using dev login)'} · dev login: ${DEV_LOGIN ? 'on' : 'off'}`);
 });

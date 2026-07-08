@@ -17,28 +17,29 @@ Trade **Neuro-sama** & **Evil Neuro** meme cards with the swarm — like Pokémo
 - 🤖 Four seeded swarm bots with collections respond to trades instantly — they accept any fair-value offer
 - ⚡ Economy: 350 starting neuros, +150 daily claim, recycle duplicates for neuros by rarity
 
-Written in TypeScript with zero runtime dependencies — the server runs its `.ts` files directly on plain Node ≥22.18 (native type stripping), with SQLite storage (built-in `node:sqlite`) in `data/swarm.db`. Schema upgrades from older versions are applied automatically on start.
+Written in TypeScript on Node ≥22.18 with Hono for routing and server-rendered JSX for the app shell. SQLite storage uses built-in `node:sqlite` in `data/swarm.db`. Schema upgrades from older versions are applied automatically on start.
 
 ## Run it
 
 ```bash
 ./setup.sh              # any distro/macOS: installs Node ≥22.18 if needed, writes .env, starts
 # or, if you already have Node ≥22.18:
-node server.ts          # → http://localhost:3000
-# on NixOS: nix run .    (or: nix-shell -p nodejs_22 --run "node server.ts")
+corepack pnpm install
+corepack pnpm start     # → http://localhost:3000
+# on NixOS: nix run .    (or: nix develop -c corepack pnpm start)
 ```
 
 ## Development
 
-TypeScript is a dev-only dependency, used purely for typechecking:
+TypeScript and TSX are used for server code and typechecking:
 
 ```bash
-npm install             # pulls typescript + @types/node
-npm run check           # typecheck server (strict) and frontend
+corepack pnpm install
+corepack pnpm check     # typecheck server (strict) and frontend
 ```
 
-There is no build step anywhere: the server runs its own `.ts` files natively, and it
-serves the SPA's TypeScript modules (`public/js/*.ts`) to browsers with the types
+There is no frontend build step: the server runs through `tsx`, and it serves the
+SPA's TypeScript modules (`public/js/*.ts`) to browsers with the types
 stripped at request time (Node's built-in `stripTypeScriptTypes`). Edit a frontend
 file and reload — that's it. Import specifiers keep their `.ts` extensions on both
 sides.
@@ -46,10 +47,11 @@ sides.
 ### Project layout
 
 ```
-server.ts        entry point — wires the router, starts the http server
+server.tsx       entry point — wires the Hono app and starts the Node server
 routes/          one file per API area; each registers its endpoints on the router
+  app.tsx          Hono JSX app-shell template rendered for SPA routes
   auth.ts          Discord OAuth + dev login, logout
-  site.ts          client config, card catalog, /app.js, meme images, avatars
+  site.ts          client config, card catalog, meme images, avatars
   players.ts       /api/me, member list, leaderboard, binders, achievements, showcase
   economy.ts       daily claim, pack opening, recycling cards
   memes.ts         meme submission portal, moderation queue, Meme of the Week vote
@@ -58,10 +60,10 @@ routes/          one file per API area; each registers its endpoints on the rout
   market.ts        fixed-price listings + auction house
 lib/             shared plumbing used by the routes
   config.ts        env vars, admin list, upload limits — all config in one place
-  router.ts        tiny :param path router; userGet/userPost require a login
+  router.ts        Hono-backed route adapter; userGet/userPost require a login
   session.ts       HMAC-signed cookie sessions
   http.ts          sendJSON / err / readBody helpers
-  static.ts        static files + type-stripped /app.js
+  static.ts        public path constants + type-stripped browser TS modules
   cardpool.ts      live card pool (catalog + approved memes), pack rolls, card values
   progress.ts      achievement engine (checks, payouts)
   views.ts         shared client-facing JSON shapes
@@ -70,8 +72,8 @@ catalog.ts       the built-in card set, rarities, economy constants
 achievements.ts  achievement definitions
 battle.ts        combat math (stats, moves, damage)
 db.ts            SQLite storage layer (schema, prepared statements, transactions)
-env.ts           .env loader (imported first by server.ts)
-public/          the SPA: index.html, style.css, and js/ (ES modules, served type-stripped)
+env.ts           .env loader (imported first by server.tsx)
+public/          the SPA: style.css and js/ (ES modules, served type-stripped)
   js/main.ts       entry point — boot sequence; importing a view module registers it
   js/nav.ts        view switching; views self-register via registerView()
   js/state.ts      the shared mutable state object; js/api.ts — fetch wrapper
@@ -81,8 +83,8 @@ public/          the SPA: index.html, style.css, and js/ (ES modules, served typ
                    market, auction, ranks, memes, home
 ```
 
-New server modules must use `.ts` import extensions (Node runs them natively) and be
-added to git before `nix run` — the flake only packages tracked files.
+Server modules use real `.ts`/`.tsx` import extensions and should be added to git
+before `nix run` — the flake only packages tracked files.
 
 `setup.sh` tries your package manager first (apt/dnf/pacman/zypper/apk/brew) and otherwise
 drops the official Node build into `./.node` — no root needed. `./setup.sh --service`
