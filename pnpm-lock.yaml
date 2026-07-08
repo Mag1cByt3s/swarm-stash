@@ -210,6 +210,12 @@ importers:
       '@hono/node-server':
         specifier: ^2.0.8
         version: 2.0.8(hono@4.12.28)
+      '@hono/oauth-providers':
+        specifier: ^0.8.5
+        version: 0.8.5(hono@4.12.28)
+      '@hono/session':
+        specifier: ^0.2.1
+        version: 0.2.1(hono@4.12.28)
       hono:
         specifier: ^4.12.28
         version: 4.12.28
@@ -388,6 +394,17 @@ packages:
     peerDependencies:
       hono: ^4
 
+  '@hono/oauth-providers@0.8.5':
+    resolution: {integrity: sha512-hgEDH/gUmB/opman9jvT8dLItZsSC9M9yFiaam0b6InK7WQkdzIcaRAkdda47QpixnK9S1Ah2vjDB2U16LkMnA==}
+    engines: {node: '>=18.4.0'}
+    peerDependencies:
+      hono: '>=3.0.0'
+
+  '@hono/session@0.2.1':
+    resolution: {integrity: sha512-9bEkT8DnQDM0KNOrSokXMvx4wp1uLmopu0BCLrHjw5DMWPAEDcONuqyn/1dqosQktcNYA3HwUHGK8WT86JtnYA==}
+    peerDependencies:
+      hono: '>=4.0.0'
+
   '@types/node@26.1.0':
     resolution: {integrity: sha512-O0A1G3xPGy4w7AgQdAQYUlQ+BKk2Oovw8eRpofyp5KdBZULnbe+WqaOVNrm705SHphCiG4XHsACrSmPu1f+Kgw==}
 
@@ -404,6 +421,9 @@ packages:
   hono@4.12.28:
     resolution: {integrity: sha512-YwUvVpSF7m1yOblFPrU3Hbo8XhPheBoiyfGuII6z19LnOr6JpDnyyp7LFNrfV56wS8tpvtBFGRISHN02pDdLOA==}
     engines: {node: '>=16.9.0'}
+
+  jose@6.2.3:
+    resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
 
   tsx@4.23.0:
     resolution: {integrity: sha512-eUdUIaCr963q2h5u3+QwvYp0+eqPvn+egeqZUm0hwERCqqx1E3kK5ehbGCvqSE5MQAULr67ww0cA3jKc3YkM1w==}
@@ -502,6 +522,15 @@ snapshots:
     dependencies:
       hono: 4.12.28
 
+  '@hono/oauth-providers@0.8.5(hono@4.12.28)':
+    dependencies:
+      hono: 4.12.28
+
+  '@hono/session@0.2.1(hono@4.12.28)':
+    dependencies:
+      hono: 4.12.28
+      jose: 6.2.3
+
   '@types/node@26.1.0':
     dependencies:
       undici-types: 8.3.0
@@ -539,6 +568,8 @@ snapshots:
     optional: true
 
   hono@4.12.28: {}
+
+  jose@6.2.3: {}
 
   tsx@4.23.0:
     dependencies:

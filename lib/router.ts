@@ -6,9 +6,9 @@
 // get/post register public routes; userGet/userPost require a logged-in user,
 // so those handlers can rely on ctx.me being set.
 
-import { Hono, type Context as HonoContext } from 'hono';
+import { Hono } from 'hono';
 import type { UserRow } from '../db.ts';
-import { readSession } from './session.ts';
+import { readSession, type AppContext, type AppEnv } from './session.ts';
 import { err, ResponseSink } from './http.ts';
 
 export interface Ctx {
@@ -17,7 +17,7 @@ export interface Ctx {
   url: URL;
   params: Record<string, string>;
   me: UserRow | null;
-  c: HonoContext;
+  c: AppContext;
 }
 // What userGet/userPost handlers receive: `me` is guaranteed.
 export interface AuthCtx extends Ctx { me: UserRow }
@@ -25,7 +25,7 @@ export interface AuthCtx extends Ctx { me: UserRow }
 type Handler = (ctx: Ctx) => unknown | Promise<unknown>;
 
 export class Router {
-  readonly app = new Hono();
+  readonly app = new Hono<AppEnv>();
 
   get(path: string, handler: (ctx: Ctx) => unknown): void { this.add('GET', path, false, handler); }
   post(path: string, handler: (ctx: Ctx) => unknown): void { this.add('POST', path, false, handler); }
@@ -34,7 +34,7 @@ export class Router {
 
   private add(method: string, path: string, auth: boolean, handler: Handler): void {
     this.app.on(method, path, async (c) => {
-      const me = readSession(c.req.raw);
+      const me = await readSession(c);
       const sink = new ResponseSink();
       if (auth && !me) {
         err(sink, 401, 'login required');

@@ -16,6 +16,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import store from './db.ts';
 import { PORT, HOST, BASE_URL, DISCORD_ENABLED, DEV_LOGIN } from './lib/config.ts';
 import { Router } from './lib/router.ts';
+import { sessionMiddleware, type AppEnv } from './lib/session.ts';
 import { PUBLIC_DIR, serveStrippedTypeScript } from './lib/static.ts';
 import { seedBots } from './lib/bots.ts';
 import { AppDocument } from './routes/app.tsx';
@@ -41,7 +42,8 @@ marketRoutes(router);
 
 seedBots(); // so trading works out of the box
 
-const app = new Hono();
+const app = new Hono<AppEnv>();
+app.use('*', sessionMiddleware);
 app.route('/', router.app);
 app.use('/js/*', async (c, next) => {
   if (new URL(c.req.url).pathname.endsWith('.ts')) return serveStrippedTypeScript(c);
