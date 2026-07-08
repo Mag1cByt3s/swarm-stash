@@ -1,7 +1,6 @@
 // Sessions: a stateless HMAC-signed cookie carrying the user id + expiry.
 
 import crypto from 'node:crypto';
-import type { IncomingMessage } from 'node:http';
 import store from '../db.ts';
 import type { UserRow } from '../db.ts';
 import { SESSION_SECRET } from './config.ts';
@@ -14,8 +13,8 @@ export function makeSession(uid: string): string {
   return `${payload}.${sign(payload)}`;
 }
 
-export function readSession(req: IncomingMessage): UserRow | null {
-  const raw = (req.headers.cookie || '').split(/;\s*/).find((c) => c.startsWith('sess='));
+export function readSession(req: Request): UserRow | null {
+  const raw = (req.headers.get('cookie') || '').split(/;\s*/).find((c) => c.startsWith('sess='));
   if (!raw) return null;
   const [payload, sig] = raw.slice(5).split('.');
   if (!payload || !sig) return null;

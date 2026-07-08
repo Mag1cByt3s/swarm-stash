@@ -12,9 +12,11 @@
     "strict": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx",
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
-  "include": ["*.ts", "lib/*.ts", "routes/*.ts"]
+  "include": ["*.ts", "*.tsx", "lib/*.ts", "routes/*.ts", "routes/*.tsx"]
 }

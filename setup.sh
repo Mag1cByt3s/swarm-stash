@@ -3,8 +3,9 @@
 # Gets the game running from a bare checkout on any distro:
 #   1. finds or installs Node ≥ 22.18 — tries the system package manager first,
 #      falls back to the official Node binary tarball in ./.node (no root)
-#   2. writes .env with a fresh SESSION_SECRET (+ optional Discord OAuth creds)
-#   3. starts the server — or installs a systemd user service with --service
+#   2. installs npm dependencies through Corepack/pnpm
+#   3. writes .env with a fresh SESSION_SECRET (+ optional Discord OAuth creds)
+#   4. starts the server — or installs a systemd user service with --service
 #
 # Usage:  ./setup.sh [--start] [--service] [--no-install]
 #   --start       start the server when setup finishes (no prompt)
@@ -18,6 +19,7 @@ cd "$(dirname "$0")"
 MIN_MAJOR=22
 MIN_MINOR=18
 NODE=""
+NODE_DIR=""
 
 c()    { printf '\033[%sm%s\033[0m\n' "$1" "$2"; }
 say()  { c '1;35' "🐝 $*"; }
@@ -127,8 +129,14 @@ else
   find_node || die "still no usable Node — install Node ≥ ${MIN_MAJOR}.${MIN_MINOR} manually and re-run"
   ok "using Node $("$NODE" --version) at $NODE"
 fi
+NODE_DIR="$(dirname "$NODE")"
 
-# ── 2. .env ───────────────────────────────────────────────────────────────────
+# ── 2. dependencies ───────────────────────────────────────────────────────────
+say "Installing dependencies…"
+"$NODE_DIR/corepack" pnpm install
+ok "dependencies installed"
+
+# ── 3. .env ───────────────────────────────────────────────────────────────────
 if [ -f .env ]; then
   ok ".env already exists — leaving it untouched"
 else
@@ -162,7 +170,7 @@ else
   fi
 fi
 
-# ── 3. run it ─────────────────────────────────────────────────────────────────
+# ── 4. run it ─────────────────────────────────────────────────────────────────
 if [ "$DO_SERVICE" = 1 ]; then
   command -v systemctl >/dev/null 2>&1 || die "--service requires systemd"
   mkdir -p "$HOME/.config/systemd/user"
@@ -173,7 +181,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=$PWD
-ExecStart=$NODE $PWD/server.ts
+ExecStart=$NODE_DIR/corepack pnpm start
 Restart=on-failure
 
 [Install]
@@ -187,15 +195,15 @@ EOF
 fi
 
 say "Setup complete."
-echo "  start the server with:  $NODE server.ts"
+echo "  start the server with:  $NODE_DIR/corepack pnpm start"
 echo "  then open:              http://localhost:3000"
 if [ "$DO_START" = 1 ]; then
-  exec "$NODE" server.ts
+  exec "$NODE_DIR/corepack" pnpm start
 elif [ -t 0 ]; then
   printf '  Start it now? [Y/n] '
   read -r yn
   case "$yn" in
     [nN]*) ;;
-    *) exec "$NODE" server.ts ;;
+    *) exec "$NODE_DIR/corepack" pnpm start ;;
   esac
 fi
