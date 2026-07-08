@@ -917,6 +917,29 @@ a { color: var(--accent-2); }
 .queue-info .t-when { color: var(--ink-dim); font-family: var(--font-mono); font-size: 12px; }
 .queue-row .trade-actions { margin-top: 0; }
 
+/* ── card admin ── */
+#admin-card-form input, #admin-card-form select, #admin-card-form textarea {
+  width: 100%; margin-bottom: 8px;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--ink);
+  border-radius: 12px; padding: 12px 14px; font-family: var(--font-body); font-size: 15px;
+}
+#admin-card-form input:focus, #admin-card-form select:focus, #admin-card-form textarea:focus {
+  outline: none; border-color: var(--accent); box-shadow: var(--glow);
+}
+#admin-card-form textarea { resize: vertical; }
+.admin-row { display: flex; gap: 10px; }
+.admin-row select { flex: 1; }
+.admin-card-row {
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px;
+  background: var(--bg-2);
+}
+.admin-emoji { font-size: 1.9rem; width: 2.4rem; text-align: center; flex: none; }
+.admin-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.admin-card-info code { font-family: var(--font-mono); font-size: .75em; color: var(--ink-dim); }
+.admin-card-info span { font-family: var(--font-mono); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+.admin-card-row .trade-actions { margin-top: 0; }
+
 /* ── zoom ── */
 #zoom-holder { width: min(360px, 80vw); animation: dealIn .35s cubic-bezier(.2,.9,.3,1.2); }
 #zoom-holder .tcg-card:hover { transform: none; }

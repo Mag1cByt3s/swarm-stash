@@ -19,6 +19,7 @@ import { Router } from './lib/router.ts';
 import { sessionMiddleware, type AppEnv } from './lib/session.ts';
 import { PUBLIC_DIR, serveStrippedTypeScript } from './lib/static.ts';
 import { seedBots } from './lib/bots.ts';
+import { seedCards } from './lib/seed-cards.ts';
 import { AppDocument } from './routes/app.tsx';
 
 import { authRoutes } from './routes/auth.ts';
@@ -29,6 +30,7 @@ import { memeRoutes } from './routes/memes.ts';
 import { tradeRoutes } from './routes/trades.ts';
 import { battleRoutes } from './routes/battles.ts';
 import { marketRoutes } from './routes/market.ts';
+import { adminRoutes } from './routes/admin.ts';
 
 const router = new Router();
 authRoutes(router);
@@ -39,8 +41,10 @@ memeRoutes(router);
 tradeRoutes(router);
 battleRoutes(router);
 marketRoutes(router);
+adminRoutes(router);
 
-seedBots(); // so trading works out of the box
+seedCards(); // populate the `cards` table from the built-in lore set (idempotent)
+seedBots();  // so trading works out of the box
 
 const app = new Hono<AppEnv>();
 app.use('*', sessionMiddleware);

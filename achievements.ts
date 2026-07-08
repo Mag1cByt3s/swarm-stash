@@ -2,7 +2,8 @@
 // Each check is a pure function over a ctx snapshot built in server.ts.
 // Unlocks are permanent (trading a card away later doesn't revoke them).
 
-import { CARDS, type SeriesId } from './catalog.ts';
+import store from './db.ts';
+import type { SeriesId } from './catalog.ts';
 
 // snapshot of everything an achievement check may look at
 export interface AchievementCtx {
@@ -25,11 +26,11 @@ export interface Achievement {
   check: (ctx: AchievementCtx) => boolean;
 }
 
-const bySeries: Partial<Record<SeriesId, string[]>> = {};
-for (const c of CARDS) (bySeries[c.series] ??= []).push(c.id);
-
+// Read the lore set fresh from the DB at check time (the cards table is seeded
+// on boot *after* this module loads, and admins can edit it live, so an
+// import-time snapshot would go stale).
 const setDone = (series: SeriesId) => (ctx: AchievementCtx) =>
-  (bySeries[series] ?? []).every((id) => ctx.ownedIds.has(id));
+  store.listCards().filter((c) => c.series === series).every((c) => ctx.ownedIds.has(c.id));
 
 export const ACHIEVEMENTS: Achievement[] = [
   { id: 'pack-1',     name: 'Pack Ripper',        emoji: '📦', reward: 50,   desc: 'Open your first pack',            check: (ctx) => ctx.stat('packs') >= 1 },
@@ -52,5 +53,5 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'set-duo',    name: 'Double Trouble',     emoji: '👯', reward: 300,  desc: 'Complete The Twins series',       check: setDone('duo') },
   { id: 'set-vedal',  name: 'Turtle Council',     emoji: '🐢', reward: 350,  desc: 'Complete the Vedal series',       check: setDone('vedal') },
   { id: 'set-collab', name: 'Collab Enjoyer',     emoji: '🎪', reward: 250,  desc: 'Complete the Collabs series',     check: setDone('collab') },
-  { id: 'all-cards',  name: 'Grand Archivist',    emoji: '📚', reward: 2000, desc: 'Complete every lore series',      check: (ctx) => CARDS.every((c) => ctx.ownedIds.has(c.id)) },
+  { id: 'all-cards',  name: 'Grand Archivist',    emoji: '📚', reward: 2000, desc: 'Complete every lore series',      check: (ctx) => store.listCards().every((c) => ctx.ownedIds.has(c.id)) },
 ];

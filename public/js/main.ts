@@ -21,6 +21,7 @@ import './market.ts';
 import './auction.ts';
 import './ranks.ts';
 import './memes.ts';
+import './admin.ts';
 
 (async function boot() {
   state.config = await api('/api/config');
@@ -40,7 +41,7 @@ import './memes.ts';
     loadTrades();
     setInterval(loadTrades, 30000); // keep trade state fresh in the background
     const deep = location.hash.slice(1);
-    nav(['binder', 'packs', 'swarm', 'arena', 'market', 'auction', 'ranks', 'trades', 'submit', 'modqueue'].includes(deep) ? deep : 'binder');
+    nav(['binder', 'packs', 'swarm', 'arena', 'market', 'auction', 'ranks', 'trades', 'submit', 'modqueue', 'admin'].includes(deep) ? deep : 'binder');
   } else {
     nav('home');
   }

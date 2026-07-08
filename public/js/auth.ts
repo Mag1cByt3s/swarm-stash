@@ -13,6 +13,7 @@ export async function refreshMe() {
   $('#user-chip').classList.toggle('hidden', !authed);
   $('#guest-nav').classList.toggle('hidden', authed);
   $('#main-nav').classList.toggle('hidden', !authed);
+  $('#nav-admin').classList.toggle('hidden', !(authed && user && user.isAdmin));
   $('#login-btn').classList.toggle('hidden', authed || !state.config.discord);
   $('#hero-login').classList.toggle('hidden', authed || !state.config.discord);
   $('#dev-login').classList.toggle('hidden', authed || !state.config.devLogin);

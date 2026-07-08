@@ -6,7 +6,7 @@ import { $, $$ } from './dom.ts';
 import { state } from './state.ts';
 
 // Views that get a #hash so they survive a reload
-const HASH_VIEWS = ['binder', 'packs', 'swarm', 'arena', 'market', 'auction', 'ranks', 'trades', 'submit', 'modqueue'];
+const HASH_VIEWS = ['binder', 'packs', 'swarm', 'arena', 'market', 'auction', 'ranks', 'trades', 'submit', 'modqueue', 'admin'];
 
 type Renderer = () => void | Promise<void>;
 const views: Record<string, Renderer> = {};

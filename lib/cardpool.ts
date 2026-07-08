@@ -1,9 +1,10 @@
 // The live card pool and pack mechanics. The pool is the built-in lore set
-// (catalog.ts) plus every approved community meme, so it changes at runtime.
+// (read from the `cards` table) plus every approved community meme, so it
+// changes at runtime as admins edit cards and memes get approved.
 
 import crypto from 'node:crypto';
 import {
-  CARDS, RARITIES, PACK_SIZE, FOIL_CHANCE, FOIL_MULT, type Card, type Rarity,
+  RARITIES, PACK_SIZE, FOIL_CHANCE, FOIL_MULT, type Card, type Rarity,
 } from '../catalog.ts';
 import store from '../db.ts';
 import type { UserRow, InstanceRow, MemeRow } from '../db.ts';
@@ -17,7 +18,7 @@ export const memeToCard = (m: MemeRow): Card => ({
   image: `/memes/${m.file}`,
 });
 
-export const allCards = (): Card[] => CARDS.concat(store.memesByStatus('approved').map(memeToCard));
+export const allCards = (): Card[] => store.listCards().concat(store.memesByStatus('approved').map(memeToCard));
 export const getCard = (id: string): Card => allCards().find((c) => c.id === id) || RETIRED;
 
 // deterministic rarity from the image hash, matching normal pack odds

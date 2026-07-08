@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import type { Rarity } from './catalog.ts';
+import type { Rarity, SeriesId, Card } from './catalog.ts';
 import type { BattleState } from './battle.ts';
 
 // ─── row shapes ──────────────────────────────────────────────────────────────
@@ -106,6 +106,16 @@ export interface AuctionRow {
   bidCount?: number;        // attached by activeAuctions()
 }
 
+export interface CardRow {
+  id: string;
+  name: string;
+  series: string;
+  rarity: string;
+  emoji: string;
+  flavor: string;
+  image: string | null;
+}
+
 export interface AchievementRow { achId: string; unlockedAt: number }
 export interface WeeklyWinnerRow { week: string; memeId: string; submitterId: string; decidedAt: number }
 export interface VoteTally { memeId: string; n: number }
@@ -162,6 +172,20 @@ db.exec(`
     resolvedAt  INTEGER
   );
   CREATE INDEX IF NOT EXISTS idx_memes_status ON memes(status);
+
+  -- The built-in lore card catalog. Seeded once on startup from
+  -- lib/seed-cards.ts; edited live via the admin page. Community meme cards
+  -- still live in the memes table and are merged into the pool at runtime.
+  CREATE TABLE IF NOT EXISTS cards (
+    id     TEXT PRIMARY KEY,
+    name   TEXT NOT NULL,
+    series TEXT NOT NULL,
+    rarity TEXT NOT NULL,
+    emoji  TEXT NOT NULL,
+    flavor TEXT NOT NULL,
+    image  TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_cards_rarity ON cards(rarity);
 
   CREATE TABLE IF NOT EXISTS achievements (
     userId     TEXT NOT NULL REFERENCES users(id),
@@ -274,6 +298,12 @@ const q = {
   setOwner: db.prepare(`UPDATE inventory SET ownerId = ? WHERE id = ?`),
   deleteInstance: db.prepare(`DELETE FROM inventory WHERE id = ?`),
 
+  listCards: db.prepare(`SELECT * FROM cards ORDER BY series, name`),
+  getCardRow: db.prepare(`SELECT * FROM cards WHERE id = ?`),
+  insertCard: db.prepare(`INSERT INTO cards (id, name, series, rarity, emoji, flavor, image)
+                          VALUES (?, ?, ?, ?, ?, ?, ?)`),
+  updateCard: db.prepare(`UPDATE cards SET name = ?, series = ?, rarity = ?, emoji = ?, flavor = ?, image = ? WHERE id = ?`),
+  deleteCard: db.prepare(`DELETE FROM cards WHERE id = ?`),
   insertTrade: db.prepare(`INSERT INTO trades (id, fromId, toId, offer, request, message, status, createdAt)
                            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`),
   getTrade: db.prepare(`SELECT * FROM trades WHERE id = ?`),
@@ -344,6 +374,9 @@ const q = {
 
 const rowToTrade = (r: TradeRow | undefined): Trade | undefined =>
   r && { ...r, offer: JSON.parse(r.offer), request: JSON.parse(r.request) };
+const rowToCard = (r: CardRow | undefined): Card | undefined =>
+  r && { id: r.id, name: r.name, series: r.series as SeriesId, rarity: r.rarity as Rarity,
+         emoji: r.emoji, flavor: r.flavor, image: r.image ?? undefined };
 const rowToBattle = (r: BattleRow | undefined): Battle | undefined =>
   r && { ...r, state: JSON.parse(r.state) };
 
@@ -376,6 +409,19 @@ const store = {
   listByOwner: (ownerId: string) => q.listByOwner.all(ownerId) as unknown as InstanceRow[],
   deleteInstance: (id: string) => q.deleteInstance.run(id),
   transferInstance: (id: string, ownerId: string) => q.setOwner.run(ownerId, id),
+
+  listCards: (): Card[] => (q.listCards.all() as unknown as CardRow[]).map((r) => rowToCard(r)!),
+  getCard: (id: string): Card | undefined => rowToCard(q.getCardRow.get(id) as unknown as CardRow | undefined),
+  createCard({ id, name, series, rarity, emoji, flavor, image }:
+             { id: string; name: string; series: SeriesId; rarity: Rarity; emoji: string; flavor: string; image?: string }): Card {
+    q.insertCard.run(id, name, series, rarity, emoji, flavor, image ?? null);
+    return rowToCard(q.getCardRow.get(id) as unknown as CardRow)!;
+  },
+  updateCard(id: string, { name, series, rarity, emoji, flavor, image }:
+             { name: string; series: SeriesId; rarity: Rarity; emoji: string; flavor: string; image?: string }): void {
+    q.updateCard.run(name, series, rarity, emoji, flavor, image ?? null, id);
+  },
+  deleteCard: (id: string) => q.deleteCard.run(id),
 
   createTrade({ fromId, toId, offer, request, message }:
               { fromId: string; toId: string; offer: string[]; request: string[]; message: string }): Trade {

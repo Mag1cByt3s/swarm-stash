@@ -33,6 +33,7 @@ const Topbar: FC = () => (
         <button data-nav="trades">Trades <span id="trade-badge" class="badge hidden"></span></button>
         <button data-nav="submit">Submit</button>
         <button data-nav="modqueue" id="nav-mod" class="hidden">Queue <span id="mod-badge" class="badge hidden"></span></button>
+        <button data-nav="admin" id="nav-admin" class="hidden">Admin</button>
       </nav>
     </div>
     <div class="topbar-right">
@@ -181,6 +182,33 @@ const MainViews: FC = () => (
       <div class="view-head"><h2>Moderation Queue</h2><p class="view-sub">Approve to mint the meme as a card (the submitter gets 2 copies). Reject deletes the image.</p></div>
       <div id="queue-list"></div>
       <p class="empty-note hidden" id="queue-empty">Queue is empty. The swarm rests… for now.</p>
+    </View>
+
+    <View id="view-admin">
+      <div class="view-head"><h2>Card Admin</h2><p class="view-sub">Create, edit, and delete the lore cards everyone pulls from packs. Changes are live instantly — the next pack rip can drop a brand-new card.</p></div>
+      <div class="submit-layout">
+        <form id="admin-card-form" class="submit-panel">
+          <h4 class="panel-title" id="admin-form-title">New card</h4>
+          <input id="ac-id" type="text" maxLength={63} placeholder="id slug — lowercase, e.g. 'evil-buh'" autocomplete="off" />
+          <input id="ac-name" type="text" maxLength={48} placeholder="display name" autocomplete="off" />
+          <div class="admin-row">
+            <select id="ac-series"></select>
+            <select id="ac-rarity"></select>
+          </div>
+          <input id="ac-emoji" type="text" maxLength={16} placeholder="emoji — e.g. 😈" autocomplete="off" />
+          <textarea id="ac-flavor" maxLength={200} placeholder="flavor text" rows={2}></textarea>
+          <input id="ac-image" type="text" placeholder="image URL (optional — otherwise emoji art)" autocomplete="off" />
+          <input id="ac-edit-id" type="hidden" />
+          <div class="trade-send-row">
+            <button type="button" class="btn-ghost hidden" id="ac-cancel">Cancel</button>
+            <button type="submit" class="btn-primary" id="ac-save">Create card</button>
+          </div>
+        </form>
+        <div class="submit-panel">
+          <h4 class="panel-title">All cards <span id="ac-count" class="pick-count"></span></h4>
+          <div id="admin-cards"></div>
+        </div>
+      </div>
     </View>
 
     <View id="view-trades">
