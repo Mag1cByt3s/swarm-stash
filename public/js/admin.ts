@@ -1,11 +1,17 @@
-// Admin view: manage the built-in card catalog (the `cards` table) — create,
-// edit, delete lore cards. Gated server-side by isAdmin; the nav button only
-// shows for admins (toggled in auth.ts). Mirrors routes/admin.ts.
+// Admin view: manage every card in the game — the built-in lore catalog (the
+// `cards` table) and approved community memes (the `memes` table). Gated
+// server-side by isAdmin; the nav button only shows for admins (auth.ts).
+// Mirrors routes/admin.ts.
 
 import { $, esc, toast, tradeBtn } from './dom.ts';
 import { state } from './state.ts';
 import { api, refreshCatalog } from './api.ts';
 import { registerView } from './nav.ts';
+
+// What the edit form is currently targeting: a lore card, a meme, or nothing
+// (creating a new lore card). Memes route to /api/admin/memes/* and lock the
+// fields the submission owns (series / emoji / image).
+let editingKind: 'lore' | 'meme' = 'lore';
 
 // Populate the series/rarity selects from the catalog fetched on boot.
 function fillSelects() {
@@ -21,26 +27,33 @@ function fillSelects() {
 
 function resetForm() {
   $('#admin-card-form').reset();
+  editingKind = 'lore';
   $('#ac-edit-id').value = '';
   $('#admin-form-title').textContent = 'New card';
   $('#ac-save').textContent = 'Create card';
   $('#ac-cancel').classList.add('hidden');
   $('#ac-id').disabled = false;
+  $('#ac-series').disabled = false;
+  $('#ac-emoji').disabled = false;
+  $('#ac-image').classList.remove('hidden');
 }
 
 function editCard(c) {
   fillSelects();
+  editingKind = c.kind === 'meme' ? 'meme' : 'lore';
+  const meme = editingKind === 'meme';
   $('#admin-form-title').textContent = `Edit · ${c.name}`;
   $('#ac-save').textContent = 'Save';
   $('#ac-cancel').classList.remove('hidden');
   $('#ac-edit-id').value = c.id;
   $('#ac-id').value = c.id; $('#ac-id').disabled = true; // id is immutable post-create
   $('#ac-name').value = c.name;
-  $('#ac-series').value = c.series;
+  $('#ac-series').value = c.series; $('#ac-series').disabled = meme;
   $('#ac-rarity').value = c.rarity;
-  $('#ac-emoji').value = c.emoji || '';
+  $('#ac-emoji').value = c.emoji || ''; $('#ac-emoji').disabled = meme;
   $('#ac-flavor').value = c.flavor || '';
   $('#ac-image').value = c.image || '';
+  $('#ac-image').classList.toggle('hidden', meme); // memes use their uploaded image
   $('#view-admin').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -60,8 +73,13 @@ $('#admin-card-form').addEventListener('submit', async (e) => {
   };
   const btn = $('#ac-save'); btn.disabled = true;
   try {
-    if (editId) await api(`/api/admin/cards/${encodeURIComponent(editId)}`, { method: 'POST', body });
-    else await api('/api/admin/cards', { method: 'POST', body });
+    if (editId && editingKind === 'meme') {
+      await api(`/api/admin/memes/${encodeURIComponent(editId)}`, { method: 'POST', body: { name: body.name, rarity: body.rarity, flavor: body.flavor } });
+    } else if (editId) {
+      await api(`/api/admin/cards/${encodeURIComponent(editId)}`, { method: 'POST', body });
+    } else {
+      await api('/api/admin/cards', { method: 'POST', body });
+    }
     toast(editId ? 'card updated' : 'card created');
     resetForm();
     await refreshCatalog();
@@ -77,23 +95,28 @@ async function renderAdmin() {
   const { cards } = await api('/api/admin/cards');
   $('#ac-count').textContent = cards.length;
   $('#admin-cards').replaceChildren(...cards.map((c) => {
+    const meme = c.kind === 'meme';
     const row = document.createElement('div');
     row.className = 'admin-card-row';
     row.innerHTML = `
       <div class="admin-emoji">${esc(c.emoji || '🃏')}</div>
       <div class="admin-card-info">
-        <b>${esc(c.name)}</b> <code>${esc(c.id)}</code>
-        <span><span class="r-${c.rarity}">${c.rarity}</span> · ${esc(state.series[c.series]?.label || c.series)}</span>
+        <b>${esc(c.name)}</b> <code>${esc(c.id)}</code>${meme ? ' <span class="admin-tag">meme</span>' : ''}
+        <span><span class="r-${c.rarity}">${c.rarity}</span> · ${esc(state.series[c.series]?.label || c.series)}${meme && c.submitter ? ` · by ${esc(c.submitter)}` : ''}</span>
       </div>`;
     const actions = document.createElement('div');
     actions.className = 'trade-actions';
     actions.append(
       tradeBtn('Edit', 'btn-ghost', () => editCard(c)),
       tradeBtn('Delete', 'btn-ghost', async () => {
-        if (!confirm(`Delete "${c.name}"? Any owned copies become a retired placeholder.`)) return;
+        const msg = meme
+          ? `Reject "${c.name}"? It leaves the pack pool, its image is deleted, and owned copies become a retired placeholder.`
+          : `Delete "${c.name}"? Any owned copies become a retired placeholder.`;
+        if (!confirm(msg)) return;
         try {
-          await api(`/api/admin/cards/${encodeURIComponent(c.id)}/delete`, { method: 'POST' });
-          toast('card deleted');
+          const ep = meme ? `/api/admin/memes/${encodeURIComponent(c.id)}/delete` : `/api/admin/cards/${encodeURIComponent(c.id)}/delete`;
+          await api(ep, { method: 'POST' });
+          toast(meme ? 'meme rejected' : 'card deleted');
           await refreshCatalog();
           await renderAdmin();
         } catch (err) { toast(err.message, true); }

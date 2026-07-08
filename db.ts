@@ -54,6 +54,7 @@ export interface MemeRow {
   status: MemeStatus;
   createdAt: number;
   resolvedAt: number | null;
+  flavor?: string | null;   // optional admin override; falls back to "submitted by …"
   submitterName?: string;   // present on joined queries
   submitterAvatar?: string;
 }
@@ -275,6 +276,7 @@ db.exec(`
 try { db.exec(`ALTER TABLE inventory ADD COLUMN foil INTEGER NOT NULL DEFAULT 0`); } catch { /* up to date */ }
 try { db.exec(`ALTER TABLE users ADD COLUMN showcase TEXT NOT NULL DEFAULT '[]'`); } catch { /* up to date */ }
 try { db.exec(`ALTER TABLE users RENAME COLUMN neurons TO neuros`); } catch { /* up to date */ }
+try { db.exec(`ALTER TABLE memes ADD COLUMN flavor TEXT`); } catch { /* up to date */ }
 
 const newId = (prefix: string): string => `${prefix}_${crypto.randomBytes(6).toString('hex')}`;
 
@@ -319,6 +321,7 @@ const q = {
                              WHERE m.status = ? ORDER BY m.createdAt DESC`),
   memesBySubmitter: db.prepare(`SELECT * FROM memes WHERE submitterId = ? ORDER BY createdAt DESC`),
   resolveMeme: db.prepare(`UPDATE memes SET status = ?, resolvedAt = ? WHERE id = ?`),
+  updateMemeRow: db.prepare(`UPDATE memes SET name = ?, rarity = ?, flavor = ? WHERE id = ?`),
   countPendingBy: db.prepare(`SELECT COUNT(*) AS n FROM memes WHERE submitterId = ? AND status = 'pending'`),
   countPending: db.prepare(`SELECT COUNT(*) AS n FROM memes WHERE status = 'pending'`),
   countApprovedBy: db.prepare(`SELECT COUNT(*) AS n FROM memes WHERE submitterId = ? AND status = 'approved'`),
@@ -452,6 +455,8 @@ const store = {
   memesByStatus: (status: MemeStatus) => q.memesByStatus.all(status) as unknown as MemeRow[],
   memesBySubmitter: (userId: string) => q.memesBySubmitter.all(userId) as unknown as MemeRow[],
   resolveMeme: (id: string, status: MemeStatus) => q.resolveMeme.run(status, Date.now(), id),
+  updateMeme: (id: string, { name, rarity, flavor }: { name: string; rarity: Rarity; flavor: string | null }) =>
+    q.updateMemeRow.run(name, rarity, flavor, id),
   pendingCountBy: (userId: string) => (q.countPendingBy.get(userId) as unknown as { n: number }).n,
   pendingCount: () => (q.countPending.get() as unknown as { n: number }).n,
   approvedCountBy: (userId: string) => (q.countApprovedBy.get(userId) as unknown as { n: number }).n,

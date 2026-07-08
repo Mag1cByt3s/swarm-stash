@@ -13,7 +13,9 @@ export async function refreshMe() {
   $('#user-chip').classList.toggle('hidden', !authed);
   $('#guest-nav').classList.toggle('hidden', authed);
   $('#main-nav').classList.toggle('hidden', !authed);
-  $('#nav-admin').classList.toggle('hidden', !(authed && user && user.isAdmin));
+  const admin = Boolean(authed && user && user.isAdmin);
+  $('#nav-admin').classList.toggle('hidden', !admin);
+  $('#nav-mod').classList.toggle('hidden', !admin);
   $('#login-btn').classList.toggle('hidden', authed || !state.config.discord);
   $('#hero-login').classList.toggle('hidden', authed || !state.config.discord);
   $('#dev-login').classList.toggle('hidden', authed || !state.config.devLogin);
@@ -22,6 +24,9 @@ export async function refreshMe() {
     $('#user-name').textContent = user.name;
     $('#user-avatar').src = user.avatar;
     $('#daily-btn').classList.toggle('hidden', !user.dailyReady);
+    const pending = user.modPending || 0;     // pending meme count, admins only
+    $('#mod-badge').textContent = pending ? String(pending) : '';
+    $('#mod-badge').classList.toggle('hidden', !pending);
   }
   updateNavOverflow(); // nav content just changed (guest vs full nav) — re-measure
   return authed;

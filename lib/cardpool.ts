@@ -14,7 +14,7 @@ export const RETIRED: Card = { id: 'retired', name: 'Retired Card', series: 'mem
 
 export const memeToCard = (m: MemeRow): Card => ({
   id: m.id, name: m.name, series: 'meme', rarity: m.rarity,
-  emoji: '🖼️', flavor: `submitted by ${m.submitterName}`,
+  emoji: '🖼️', flavor: m.flavor || `submitted by ${m.submitterName}`,
   image: `/memes/${m.file}`,
 });
 
